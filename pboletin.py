@@ -7,6 +7,27 @@ from operator import itemgetter
 import pprint
 import itertools
 import os
+import configparser
+
+
+class Config:
+
+	def __init__(self, file="pboletin.ini"):
+
+		self.file = file
+		self.config = configparser.ConfigParser()
+		self.config.read(self.file)
+		self.__dict__.update(dict(self.config.items("GLOBAL")))
+
+		# np.array
+		for e in ["linecolor_from" , "linecolor_to"]:
+			self.__dict__[e] = np.array(list(map(int,self.__dict__[e].split(','))))
+
+		# int
+		for e in ["resolution", "artifact_min_size"]:
+			self.__dict__[e] = int(self.__dict__[e])
+
+cfg = Config()
 
 def detect_lines(filepath):
 
@@ -23,21 +44,20 @@ def detect_lines(filepath):
 	############################################################################
 	# Me quedo solo con el color de las lineas rectas y el texto b y n (negativo)
 	############################################################################
-	lower = np.array([32,31,35])  #-- Lower range --
-	upper = np.array([32,31,35])  #-- Upper range --
-	mask_bw_negative = cv.inRange(src, lower, upper)
+	mask_bw_negative = cv.inRange(src, cfg.linecolor_from, cfg.linecolor_to)
 	cv.imwrite('mask_bw_negative.png', mask_bw_negative)
 
 	############################################################################
 	# Quito artefactos de hasta una cierta superficie
 	############################################################################
-	min_size = 1000
 	nb_components, output, stats, centroids = cv.connectedComponentsWithStats(mask_bw_negative, connectivity=8)
 	sizes = stats[1:, -1]
 	nb_components = nb_components - 1
 	clean_mask = np.zeros((output.shape))
+
+	min_size = cfg.artifact_min_size:
 	for i in range(0, nb_components):
-		if sizes[i] >= min_size:
+		if sizes[i] >= cfg.artifact_min_size:
 			clean_mask[output == i + 1] = 255
 
 	cv.imwrite('clean_mask.png', clean_mask)
@@ -55,7 +75,7 @@ def detect_lines(filepath):
 	height, width, channels = cdstP.shape
 	blank_image = np.zeros((height,width,3), np.uint8)
 
-	in_res = 300
+	in_res = cfg.resolution
 	minLineLength = 300*(300/in_res)
 	maxLineGap = 300*(300/in_res)
 	thres = int(150*(300/in_res))
@@ -102,11 +122,11 @@ def detect_lines(filepath):
 			cv.imwrite('{0}_crop_{1}.png'.format(filename,i), roi)
 			i = i + 1
 
-	# cv.namedWindow(filepath, cv.WINDOW_NORMAL)
-	# cv.resizeWindow(filepath, 600,600)
-	# cv.imshow(filepath, cdstP)
-	# cv.waitKey()
-	# cv.destroyAllWindows()
+	cv.namedWindow(filepath, cv.WINDOW_NORMAL)
+	cv.resizeWindow(filepath, 600,600)
+	cv.imshow(filepath, cdstP)
+	cv.waitKey()
+	cv.destroyAllWindows()
 
 
 def process_lines(lista, in_res):
@@ -117,12 +137,12 @@ def process_lines(lista, in_res):
 	# right = int(2300*in_res/300)
 
 	############################################################################
-	# Establezco el valor de y minímo para que caiga debajo de la recta 
+	# Establezco el valor de y minímo para que caiga debajo de la recta
 	# horizontal del titulo de página
 	############################################################################
-	lista = [[left if l[0]-(left*2) < left else l[0], 
+	lista = [[left if l[0]-(left*2) < left else l[0],
 			  l[1] if l[1] > top else top,
-		      left if l[2]-(left*2) < left else l[2], 
+		      left if l[2]-(left*2) < left else l[2],
 		      l[3] if l[3] > top else top]
 			  for l in lista]
 
@@ -228,7 +248,7 @@ def simplificar(mylista, level=5):
 
 def main(argv):
 
-	file_pattern = argv[0] if len(argv) > 0 else "./boletines/img/*.png"
+	file_pattern = argv[0] if len(argv) > 0 else "./{0}/*.{1}".format(cfg.workdir, cfg.imgext)
 	for f in glob.glob(file_pattern):
 		detect_lines(f)
 
@@ -236,3 +256,4 @@ def main(argv):
 
 if __name__ == "__main__":
 	main(sys.argv[1:])
+	pass
