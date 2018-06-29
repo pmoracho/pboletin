@@ -27,6 +27,11 @@ Procesamiento de los boletines de marcas y patentes de Argentina
 
 + Recorte automático de cada acta
 
+TO DO:
+	- argparse
+	- modo testing de una determinada página
+	- Try / catch pdftoppm
+	- Problema de linea vertical en algunos casos
 """
 
 __author__		= "Patricio Moracho <pmoracho@gmail.com>"
@@ -167,6 +172,11 @@ class Config:
 			"max_area", "min_area" ]:
 			self.__dict__[e] = int(self.__dict__[e])
 
+		# booleano
+		for e in ["save_process_files"]:
+			self.__dict__[e] = True if self.__dict__[e] == "True" else False
+
+
 cfg = Config()
 
 def crop_regions(filepath, workpath, outputpath):
@@ -185,8 +195,10 @@ def crop_regions(filepath, workpath, outputpath):
 	# Me quedo solo con el color de las lineas rectas y el texto b y n (negativo)
 	############################################################################
 	mask_bw_negative = cv.inRange(src, cfg.linecolor_from, cfg.linecolor_to)
-	cv.imwrite(os.path.join(workpath,'mask_bw_negative.png'), mask_bw_negative)
-	
+
+	if cfg.save_process_files:
+		cv.imwrite(os.path.join(workpath,'mask_bw_negative.png'), mask_bw_negative)
+
 	############################################################################
 	# Quito artefactos de hasta una cierta superficie
 	############################################################################
@@ -201,9 +213,9 @@ def crop_regions(filepath, workpath, outputpath):
 
 	cv.imwrite(os.path.join(workpath,'clean_mask.png'), clean_mask)
 	clean_mask = cv.imread(os.path.join(workpath,'clean_mask.png'))
-
 	clean_mask_gray = cv.cvtColor(clean_mask,cv.COLOR_BGR2GRAY)
-	cv.imwrite(os.path.join(workpath,'clean_mask_gray.png'), clean_mask_gray)
+	if cfg.save_process_files:
+		cv.imwrite(os.path.join(workpath,'clean_mask_gray.png'), clean_mask_gray)
 
 	############################################################################
 	# Remuevo las líneas para recortar luego sin estas
@@ -214,10 +226,9 @@ def crop_regions(filepath, workpath, outputpath):
 	height, width, channels = cdstP.shape
 	blank_image = np.zeros((height,width,3), np.uint8)
 
-	in_res = cfg.resolution
-	minLineLength = 300*(300/in_res)
-	maxLineGap = 300*(300/in_res)
-	thres = int(150*(300/in_res))
+	minLineLength = 300*(300/cfg.resolution)
+	maxLineGap = 300*(300/cfg.resolution)
+	thres = int(150*(300/cfg.resolution))
 	rho=1
 	linesP = cv.HoughLinesP(clean_mask_gray,rho, np.pi/180,thres,minLineLength = minLineLength,maxLineGap = maxLineGap)
 	if linesP is not None:
@@ -228,8 +239,9 @@ def crop_regions(filepath, workpath, outputpath):
 			cv.line(cdstP, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
 			cv.line(blank_image, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
 
-	cv.imwrite(os.path.join(workpath,'blank_image.png'), blank_image)
-	cv.imwrite(os.path.join(workpath,'final.png'), cdstP)
+	if cfg.save_process_files:
+		cv.imwrite(os.path.join(workpath,'blank_image.png'), blank_image)
+		cv.imwrite(os.path.join(workpath,'final.png'), cdstP)
 
 	############################################################################
 	# En bae a la mascara obtengo los rectanfulos de interes
@@ -238,7 +250,8 @@ def crop_regions(filepath, workpath, outputpath):
 	retval, thresh_gray = cv.threshold(gray, thresh=1, maxval=255, \
                                    type=cv.THRESH_BINARY_INV)
 
-	cv.imwrite(os.path.join(workpath,'thresh_gray.png'), thresh_gray)
+	if cfg.save_process_files:
+		cv.imwrite(os.path.join(workpath,'thresh_gray.png'), thresh_gray)
 
 	image, contours, hierarchy = cv.findContours(thresh_gray,cv.RETR_CCOMP , \
 									cv.CHAIN_APPROX_SIMPLE )
@@ -246,9 +259,9 @@ def crop_regions(filepath, workpath, outputpath):
 	############################################################################
 	# Recorto los rectangulos
 	############################################################################
-	max_area = cfg.max_area * (cfg.resolution/300) 
-	min_area = cfg.min_area * (cfg.resolution/300) 
-	
+	max_area = cfg.max_area * (300/cfg.resolution)
+	min_area = cfg.min_area * (300/cfg.resolution)
+
 	i = 1
 	for cont in contours:
 		x,y,w,h = cv.boundingRect(cont)
@@ -262,8 +275,8 @@ def crop_regions(filepath, workpath, outputpath):
 
 def process_lines(lista, in_res):
 
-	top = int(240*in_res/300)
-	left= int(80*in_res/300)
+	top = int(240*300/cfg.resolution)
+	left= int(80*300/cfg.resolution)
 	# bottom = int(3260*in_res/300)
 	# right = int(2300*in_res/300)
 
@@ -298,15 +311,12 @@ def process_lines(lista, in_res):
 	############################################################################
 	# level = 55
 	# aprox = {0:{}, 1:{}}
-
 	# for i in (0,1):
 	# 	valor = list(sum(list(zip(*[(e[0+i], e[2+i]) for e in lista])), ()))
 	# 	print(valor)
 	# 	for e in valor:
 	# 		if e not in aprox[i]:
 	# 			aprox[i].update({e-x: e for x in range(-level, level + 1, 1)})
-
-
 	# for i,e in enumerate(lista):
 	# 	lista[i][0] = aprox[0][e[0]]
 	# 	lista[i][1] = aprox[1][e[1]]
@@ -350,9 +360,9 @@ def add_box(lista, top, bottom, right, left):
 	puntos=[(l[0],l[1]) for l in lista]
 	puntos.extend([(l[2],l[3]) for l in lista])
 
-	min_x = min([x for x,y in puntos]) - 50
+	min_x = min([x for x,y in puntos]) - 50*(cfg.resolution/300)
 	min_y = min([y for x,y in puntos])
-	max_x = max([x for x,y in puntos]) + 50
+	max_x = max([x for x,y in puntos]) + 50*(cfg.resolution/300)
 	max_y = max([y for x,y in puntos])
 
 	lista.append([min_x, min_y, max_x, min_y])
@@ -404,14 +414,14 @@ def process_pdf(pdf_file):
 	for p in range(cfg.ignore_first_pages+1,(total_pages-cfg.ignore_last_pages)+1):
 
 		cmdline = '{0} -png -f {3} -l {4} -r {5} {1} {2}/pagina'.format(
-			cfg.pdftoppm_bin, 
-			pdf_file, 
+			cfg.pdftoppm_bin,
+			pdf_file,
 			workpath,
-			p, 
+			p,
 			p,
 			cfg.resolution
 		)
-		with subprocess.Popen(cmdline) as proc:
+		with subprocess.Popen(cmdline, shell=True) as proc:
 			pass
 
 		img_file = "pagina-{0}.png".format(str(p).zfill(maxz))
@@ -428,7 +438,7 @@ def process_pdf(pdf_file):
 	shutil.rmtree(workpath)
 	bar.finish()
 
-	loginfo("Finish process)
+	loginfo("Finish process")
 
 
 def main(argv):
