@@ -1,0 +1,9 @@
+chardet==3.0.4
+numpy==1.14.2
+opencv-python==3.1.0
+pdfminer.six==20170720
+pprint==0.1
+progressbar2==3.38.0
+pycryptodome==3.5.1
+python-utils==2.3.0
+six==1.11.0
