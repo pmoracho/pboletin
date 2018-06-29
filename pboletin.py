@@ -50,19 +50,24 @@ try:
 	from gettext import gettext as _
 	gettext.textdomain('padrondl')
 
-	def _my_gettext(s):
-		"""Traducir algunas cadenas de argparse."""
-		current_dict = {'usage: ': 'uso: ',
-						'optional arguments': 'argumentos opcionales',
-						'show this help message and exit': 'mostrar esta ayuda y salir',
-						'positional arguments': 'argumentos posicionales',
-						'the following arguments are required: %s': 'los siguientes argumentos son requeridos: %s'}
+	def my_gettext(s):
+		"""my_gettext: Traducir algunas cadenas de argparse."""
+		current_dict = {
+			'usage: ': 'uso: ',
+			'optional arguments': 'argumentos opcionales',
+			'show this help message and exit': 'mostrar esta ayuda y salir',
+			'positional arguments': 'argumentos posicionales',
+			'the following arguments are required: %s': 'los siguientes argumentos son requeridos: %s',
+			'show program''s version number and exit': 'Mostrar la versión del programa y salir',
+			'expected one argument': 'se espera un valor para el parámetro',
+			'expected at least one argument': 'se espera al menos un valor para el parámetro'
+		}
 
 		if s in current_dict:
 			return current_dict[s]
 		return s
 
-	gettext.gettext = _my_gettext
+	gettext.gettext = my_gettext
 
 	import math
 	import cv2 as cv
@@ -86,80 +91,109 @@ try:
 	import shutil
 	import re
 
-
 except ImportError as err:
 	modulename = err.args[0].partition("'")[-1].rpartition("'")[0]
 	print(_("No fue posible importar el modulo: %s") % modulename)
 	sys.exit(-1)
 
+def resource_path(relative):
+	"""Obtiene un path, toma en consideración el uso de pyinstaller"""
+	if hasattr(sys, "_MEIPASS"):
+		return os.path.join(sys._MEIPASS, relative)
+	return os.path.join(relative)
 
-# def init_argparse():
-# 	"""Inicializar parametros del programa."""
-# 	cmdparser = argparse.ArgumentParser(prog=__appname__,
-# 										description="%s\n%s\n" % (__appdesc__, __copyright__),
-# 										epilog="",
-# 										add_help=True,
-# 										formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=50)
-# 	)
+def expand_filename(filename):
 
-# 	opciones = {	"padron": {
-# 								"type": str,
-# 								"nargs": '?',
-# 								"action": "store",
-# 								"help": _("Padrón a descargar")
-# 					},
-# 					"--version -v": {
-# 								"action":	"version",
-# 								"version":	__version__,
-# 								"help":		_("Mostrar el número de versión y salir")
-# 					},
-# 					"--show-padrones -s": {
-# 								"action":	"store_true",
-# 								"dest":		"showpadrones",
-# 								"default":	False,
-# 								"help":		_("Verifciación completa. c: algoritmos de compresión, e: algoritmos de encriptación.")
-# 					},
-# 					"--output-path -o": {
-# 								"type": 	str,
-# 								"action": 	"store",
-# 								"dest": 	"outputpath",
-# 								"default":	None,
-# 								"help":		_("Carpeta de outputh del padrón descargado.")
-# 					},
-# 					"--log-level -n": {
-# 								"type": 	str,
-# 								"action": 	"store",
-# 								"dest": 	"loglevel",
-# 								"default":	"info",
-# 								"help":		_("Nivel de log")
-# 					},
-# 					"--quiet -q": {
-# 								"action": 	"store_true",
-# 								"dest": 	"quiet",
-# 								"default":	False,
-# 								"help":		_("Modo silencioso sin mostrar barra de progreso.")
-# 					},
-# 			}
+	if '{desktop}' in filename:
+		tmp = os.path.join(os.path.expanduser('~'), 'Desktop')
+		filename = filename.replace('{desktop}', tmp)
 
-# 	for key, val in opciones.items():
-# 		args = key.split()
-# 		kwargs = {}
-# 		kwargs.update(val)
-# 		cmdparser.add_argument(*args, **kwargs)
+	if '{tmpdir}' in filename:
+		tmp = tempfile.gettempdir()
+		filename = filename.replace('{tmpdir}', tmp)
 
-# 	return cmdparser
+	if '{tmpfile}' in filename:
+		tmp = tempfile.mktemp()
+		filename = filename.replace('{tmpfile}', tmp)
 
+	return filename
+
+def init_argparse():
+	"""Inicializar parametros del programa."""
+	cmdparser = argparse.ArgumentParser(prog=__appname__,
+										description="%s\n%s\n" % (__appdesc__, __copyright__),
+										epilog="",
+										add_help=True,
+										formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=50)
+	)
+
+	opciones = {	"pdffile": {
+								"type": str,
+								"nargs": '?',
+								"action": "store",
+								"help": _("Boletín en PDF a procesar")
+					},
+					"--version -v": {
+								"action":	"version",
+								"version":	__version__,
+								"help":		_("Mostrar el número de versión y salir")
+					},
+					"--config -c": {
+								"type": 	str,
+								"action": 	"store",
+								"dest": 	"configfile",
+								"default":	None,
+								"help":		_("Establecer el archivo de configuración del proceso de recorte. Por defecto se busca 'pboleti.ini'.")
+					},
+					"--debug-page -p": {
+								"type": 	int,
+								"action": 	"store",
+								"dest": 	"debug_page",
+								"default":	None,
+								"help":		_("Establecer el proceso de una determinada página para debug.")
+					},
+					"--log-level -n": {
+								"type": 	str,
+								"action": 	"store",
+								"dest": 	"loglevel",
+								"default":	"info",
+								"help":		_("Nivel de log")
+					},
+					"--quiet -q": {
+								"action": 	"store_true",
+								"dest": 	"quiet",
+								"default":	False,
+								"help":		_("Modo silencioso sin mostrar barra de progreso.")
+					},
+			}
+
+	for key, val in opciones.items():
+		args = key.split()
+		kwargs = {}
+		kwargs.update(val)
+		cmdparser.add_argument(*args, **kwargs)
+
+	return cmdparser
 
 def loginfo(msg):
 	logging.info(msg.replace("|", " "))
 
-
 class Config:
 
-	def __init__(self, file="pboletin.ini"):
+	def __init__(self, file=None):
 
 		self.file = file
 		self.config = ConfigParser()
+		if self.file:
+			self._load()
+
+	def set_file(self, file):
+
+		self.file = file
+		if self.file:
+			self._load()
+
+	def _load(self):
 		self.config.read(self.file)
 		self.__dict__.update(dict(self.config.items("GLOBAL")))
 
@@ -176,10 +210,9 @@ class Config:
 		for e in ["save_process_files"]:
 			self.__dict__[e] = True if self.__dict__[e] == "True" else False
 
-
 cfg = Config()
 
-def crop_regions(filepath, workpath, outputpath):
+def crop_regions(filepath, workpath, outputpath, metadata=None):
 
 	filename, _ = os.path.splitext(os.path.basename(filepath))
 
@@ -190,6 +223,8 @@ def crop_regions(filepath, workpath, outputpath):
 	if src is None:
 		print ('Error opening {0}!'.format(filepath))
 		return -1
+
+	height, width, channels = src.shape
 
 	############################################################################
 	# Me quedo solo con el color de las lineas rectas y el texto b y n (negativo)
@@ -205,15 +240,15 @@ def crop_regions(filepath, workpath, outputpath):
 	nb_components, output, stats, centroids = cv.connectedComponentsWithStats(mask_bw_negative, connectivity=8)
 	sizes = stats[1:, -1]
 	nb_components = nb_components - 1
-	clean_mask = np.zeros((output.shape))
+	clean_mask = np.zeros((output.shape[0], output.shape[1], 3), dtype = "uint8")
 
 	for i in range(0, nb_components):
 		if sizes[i] >= cfg.artifact_min_size:
 			clean_mask[output == i + 1] = 255
 
-	cv.imwrite(os.path.join(workpath,'clean_mask.png'), clean_mask)
-	clean_mask = cv.imread(os.path.join(workpath,'clean_mask.png'))
-	clean_mask_gray = cv.cvtColor(clean_mask,cv.COLOR_BGR2GRAY)
+	clean_mask_gray = cv.cvtColor(clean_mask, cv.COLOR_BGR2GRAY)
+	ret, clean_mask_gray = cv.threshold(clean_mask_gray, 10, 255, cv.THRESH_BINARY)
+
 	if cfg.save_process_files:
 		cv.imwrite(os.path.join(workpath,'clean_mask_gray.png'), clean_mask_gray)
 
@@ -222,6 +257,9 @@ def crop_regions(filepath, workpath, outputpath):
 	############################################################################
 	cdstP = np.copy(src)
 	cdstP = cv.bitwise_not(cdstP,cdstP,mask=clean_mask_gray)
+
+	if cfg.save_process_files:
+		cv.imwrite(os.path.join(workpath,'original_sin_lineas.png'), cdstP)
 
 	height, width, channels = cdstP.shape
 	blank_image = np.zeros((height,width,3), np.uint8)
@@ -234,7 +272,7 @@ def crop_regions(filepath, workpath, outputpath):
 	if linesP is not None:
 
 		ll = [e[0] for e in np.array(linesP).tolist()]
-		ll = process_lines(ll, in_res)
+		ll = process_lines(ll,cfg.resolution)
 		for l in [e[1] for e in enumerate(ll)]:
 			cv.line(cdstP, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
 			cv.line(blank_image, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
@@ -262,6 +300,10 @@ def crop_regions(filepath, workpath, outputpath):
 	max_area = cfg.max_area * (300/cfg.resolution)
 	min_area = cfg.min_area * (300/cfg.resolution)
 
+	if metadata:
+		(x, y, actas) = metadata
+		relation = sum([height/y, width/x])/2
+
 	i = 1
 	for cont in contours:
 		x,y,w,h = cv.boundingRect(cont)
@@ -269,9 +311,24 @@ def crop_regions(filepath, workpath, outputpath):
 		if area < max_area and area > min_area:
 			mx = x,y,w,h
 			# pprint.pprint(mx)
-			roi=src[y:y+h,x:x+w]
-			cv.imwrite(os.path.join(outputpath,'{0}_crop_{1}.png'.format(filename,i)), roi)
+			roi=cdstP[y:y+h,x:x+w]
+
+			acta = get_acta(actas, (x,y,x+w,y+h), relation)
+			if acta:
+				cv.imwrite(os.path.join(outputpath,'{0}.png'.format(acta)), roi)
+			else:
+				cv.imwrite(os.path.join(outputpath,'{0}_crop_{1}.png'.format(filename,i)), roi)
+
 			i = i + 1
+
+def get_acta(actas, region, r):
+
+	rx1, ry1, rx2, ry2 = region
+	for x, y, numero in actas:
+		if x*r >= rx1 and x*r <= rx2 and y*r >= ry1 and y*r <= ry2:
+			return numero
+
+	return None
 
 def process_lines(lista, in_res):
 
@@ -291,7 +348,7 @@ def process_lines(lista, in_res):
 			  for l in lista]
 
 	############################################################################
-	# Agregago el recuadro completo de la pagina
+	# Agrego el recuadro completo de la pagina
 	############################################################################
 	puntos=[(l[0],l[1]) for l in lista]
 	puntos.extend([(l[2],l[3]) for l in lista])
@@ -336,11 +393,9 @@ def process_lines(lista, in_res):
 		if e not in aprox[i]:
 			aprox[i].update({e-x: e for x in range(-level, level + 1, 1)})
 
-
 	for i,e in enumerate(lista):
 		lista[i][0] = aprox[0][e[0]]
 		lista[i][2] = aprox[0][e[2]]
-
 
 	############################################################################
 	# Ordeno y me quedo con las líneas no repetidas
@@ -370,7 +425,6 @@ def add_box(lista, top, bottom, right, left):
 	lista.append([min_x, max_y, max_x, max_y])
 	lista.append([max_x, max_y, max_x, min_y])
 
-
 def simplificar(mylista, level=5):
 
 	aprox = {0:{}, 1:{}}
@@ -387,18 +441,42 @@ def simplificar(mylista, level=5):
 		mylista[i][2] = aprox[0][e[2]]
 		mylista[i][3] = aprox[1][e[3]]
 
-
-rxcountpages = re.compile(r"/Type\s*/Page([^s]|$)", re.MULTILINE|re.DOTALL)
 def count_pages(filename):
+	rxcountpages = re.compile(cfg.rxcountpages, re.MULTILINE|re.DOTALL)
 	with open(filename,"rb") as f:
 		data = f.read()
 	return len(rxcountpages.findall(data.decode('latin1')))
 
-def process_pdf(pdf_file):
+def get_actas(html):
+
+	x,y = 1, 1
+	rxactas = re.compile(cfg.rxpagedim, re.MULTILINE)
+	t = re.findall(rxactas, html)
+	if t:
+		x,y = map(int,t[0])
+
+	rxactas = re.compile(cfg.rxactas, re.MULTILINE)
+	m = re.finditer(rxactas, html)
+
+	if m:
+		return (x, y, list( (int(e.group(2)),int(e.group(1)),e.group(3)) for e in m ))
+	else:
+		return None
+
+def process_pdf(pdf_file, force_page=None):
 
 	print()
+
 	total_pages = count_pages(pdf_file)
-	num_bars = (total_pages-cfg.ignore_last_pages-cfg.ignore_first_pages)
+	if not force_page:
+		firstp = cfg.ignore_first_pages+1
+		endp = (total_pages-cfg.ignore_last_pages)+1
+		num_bars = (total_pages-cfg.ignore_last_pages-cfg.ignore_first_pages)
+	else:
+		firstp = force_page
+		endp = force_page + 1
+		num_bars = 1
+
 	widgets = [FormatLabel(''), ' ', Percentage(), ' ', Bar('#'), ' ', ETA(), ' ', RotatingMarker()]
 	bar = ProgressBar(widgets=widgets, maxval=num_bars)
 
@@ -411,7 +489,8 @@ def process_pdf(pdf_file):
 	loginfo("Extract PDF pages form {0}".format(pdf_file))
 	maxz = len(str(total_pages))
 	i=1
-	for p in range(cfg.ignore_first_pages+1,(total_pages-cfg.ignore_last_pages)+1):
+
+	for p in range(firstp,endp):
 
 		cmdline = '{0} -png -f {3} -l {4} -r {5} {1} {2}/pagina'.format(
 			cfg.pdftoppm_bin,
@@ -424,10 +503,23 @@ def process_pdf(pdf_file):
 		with subprocess.Popen(cmdline, shell=True) as proc:
 			pass
 
+		cmdline = '{0} -q -c -f {3} -l {4} {1} {2}/pagina'.format(
+			cfg.pdftohtml_bin,
+			pdf_file,
+			workpath,
+			p,
+			p
+		)
+		with subprocess.Popen(cmdline, shell=True) as proc:
+			pass
+
+		with open(os.path.join(workpath,'pagina-{0}.html'.format(str(p))), 'r', encoding="Latin1") as f:
+			html = f.read()
+
 		img_file = "pagina-{0}.png".format(str(p).zfill(maxz))
 		img_file = os.path.join(workpath, img_file)
 
-		crop_regions(img_file, workpath, outputpath)
+		crop_regions(img_file, workpath, outputpath, metadata=get_actas(html))
 
 		widgets[0] = FormatLabel('[Página {0} de {1}]'.format(i,num_bars))
 		loginfo("Extract page {0} of {1}".format(i,num_bars))
@@ -435,18 +527,42 @@ def process_pdf(pdf_file):
 		i = i + 1
 
 	loginfo("Remove temp dir")
-	shutil.rmtree(workpath)
+	if args.debug_page:
+		print(workpath)
+	else:
+		shutil.rmtree(workpath)
 	bar.finish()
 
 	loginfo("Finish process")
 
 
-def main(argv):
-
-	pdf_file = argv[0] if len(argv) > 0 else "./boletines/4589_3_.pdf"
-	process_pdf(pdf_file)
-	return 0
-
+################################################################################
+#  Cuerpo principal
+################################################################################
 if __name__ == "__main__":
-	main(sys.argv[1:])
-	pass
+
+	cmdparser = init_argparse()
+	try:
+		args = cmdparser.parse_args()
+	except IOError as msg:
+		cmdparser.error(str(msg))
+		sys.exit(-1)
+
+	# Definir el path de dónde obtener la configuración
+	if not args.configfile:
+		# determine if application is a script file or frozen exe
+		if getattr(sys, 'frozen', False):
+			application_path = os.path.dirname(sys.executable)
+		elif __file__:
+			application_path = os.path.dirname(__file__)
+
+		configfile = resource_path(os.path.join(application_path, 'pboletin.ini'))
+	else:
+		configfile = args.configfile
+
+	if args.pdffile:
+		cfg.set_file(configfile)
+		process_pdf(args.pdffile, args.debug_page)
+	else:
+		cmdparser.print_help()
+
