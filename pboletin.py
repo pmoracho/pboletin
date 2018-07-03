@@ -28,10 +28,7 @@ Procesamiento de los boletines de marcas y patentes de Argentina
 + Recorte automático de cada acta
 
 TO DO:
-	- argparse
-	- modo testing de una determinada página
 	- Try / catch pdftoppm
-	- Problema de linea vertical en algunos casos
 """
 
 __author__		= "Patricio Moracho <pmoracho@gmail.com>"
@@ -90,6 +87,9 @@ try:
 	import tempfile
 	import shutil
 	import re
+	from itertools import chain
+	from itertools import groupby
+	import statistics
 
 except ImportError as err:
 	modulename = err.args[0].partition("'")[-1].rpartition("'")[0]
@@ -178,6 +178,7 @@ def init_argparse():
 def loginfo(msg):
 	logging.info(msg.replace("|", " "))
 
+
 class Config:
 
 	def __init__(self, file=None):
@@ -212,6 +213,25 @@ class Config:
 
 cfg = Config()
 
+def crop_regions_new(filepath, workpath, outputpath, metadata=None):
+
+	filename, _ = os.path.splitext(os.path.basename(filepath))
+
+	############################################################################
+	# Lectura inicial de la imagen
+	############################################################################
+	src = cv.imread(filepath)
+	if src is None:
+		print ('Error opening {0}!'.format(filepath))
+		return -1
+
+	height, width, channels = src.shape
+
+	if metadata:
+		(x, y, actas) = metadata
+		relation = sum([height/y, width/x])/2
+
+
 def crop_regions(filepath, workpath, outputpath, metadata=None):
 
 	filename, _ = os.path.splitext(os.path.basename(filepath))
@@ -245,25 +265,44 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 	for i in range(0, nb_components):
 		if sizes[i] >= cfg.artifact_min_size:
 			clean_mask[output == i + 1] = 255
+	############################################################################
 
-	clean_mask_gray = cv.cvtColor(clean_mask, cv.COLOR_BGR2GRAY)
-	ret, clean_mask_gray = cv.threshold(clean_mask_gray, 10, 255, cv.THRESH_BINARY)
-
-	if cfg.save_process_files:
-		cv.imwrite(os.path.join(workpath,'clean_mask_gray.png'), clean_mask_gray)
+	final = np.copy(src)
+	final_con_lineas = np.copy(src)
+	height, width, channels = final.shape
+	blank_image = np.zeros((height,width,3), np.uint8)
 
 	############################################################################
 	# Remuevo las líneas para recortar luego sin estas
 	############################################################################
-	cdstP = np.copy(src)
-	cdstP = cv.bitwise_not(cdstP,cdstP,mask=clean_mask_gray)
+	clean_mask = cv.cvtColor(clean_mask, cv.COLOR_BGR2GRAY)
+	ret, clean_mask = cv.threshold(clean_mask, 10, 255, cv.THRESH_BINARY)
+	# clean_mask = cv.bitwise_not(clean_mask)
+	mask = cv.bitwise_not(final,final,mask=clean_mask)
+	final = cv.bitwise_and(final, mask)			
 
 	if cfg.save_process_files:
-		cv.imwrite(os.path.join(workpath,'original_sin_lineas.png'), cdstP)
+		cv.imwrite(os.path.join(workpath,'clean_mask.png'), clean_mask)
+	
+	if cfg.save_process_files:
+		cv.imwrite(os.path.join(workpath,'original_sin_lineas.png'), final)
 
-	height, width, channels = cdstP.shape
+	############################################################################
+
+	cv.imshow("clean_mask Image", clean_mask)
+	cv.imshow("final Image", final)
+	cv.waitKey(0)
+
+
+	kernel = np.ones((3,3),np.uint8)
+	clean_mask_gray = cv.dilate(clean_mask,kernel,iterations = 1)
+
+
+	############################################################################
+	# Detección de líneas rectas y generación de máscara de recorte
+	############################################################################
+	height, width, channels = final.shape
 	blank_image = np.zeros((height,width,3), np.uint8)
-
 	minLineLength = 300*(300/cfg.resolution)
 	maxLineGap = 300*(300/cfg.resolution)
 	thres = int(150*(300/cfg.resolution))
@@ -274,28 +313,27 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 		ll = [e[0] for e in np.array(linesP).tolist()]
 		ll = process_lines(ll,cfg.resolution)
 		for l in [e[1] for e in enumerate(ll)]:
-			cv.line(cdstP, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
+			cv.line(final_con_lineas, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
 			cv.line(blank_image, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
 
 	if cfg.save_process_files:
 		cv.imwrite(os.path.join(workpath,'blank_image.png'), blank_image)
-		cv.imwrite(os.path.join(workpath,'final.png'), cdstP)
+		cv.imwrite(os.path.join(workpath,'final_con_lineas.png'), final_con_lineas)
 
 	############################################################################
-	# En bae a la mascara obtengo los rectanfulos de interes
+	# En base a la mascara obtengo los rectangulos de interes
 	############################################################################
 	gray = cv.cvtColor(blank_image, cv.COLOR_BGR2GRAY) # convert to grayscale
 	retval, thresh_gray = cv.threshold(gray, thresh=1, maxval=255, \
                                    type=cv.THRESH_BINARY_INV)
-
-	if cfg.save_process_files:
-		cv.imwrite(os.path.join(workpath,'thresh_gray.png'), thresh_gray)
 
 	image, contours, hierarchy = cv.findContours(thresh_gray,cv.RETR_CCOMP , \
 									cv.CHAIN_APPROX_SIMPLE )
 
 	############################################################################
 	# Recorto los rectangulos
+	# Si las coordenadas de algun acta entran dentro de la zona de recorte
+	# Bien! podemos asociar la zona con el número de acta
 	############################################################################
 	max_area = cfg.max_area * (300/cfg.resolution)
 	min_area = cfg.min_area * (300/cfg.resolution)
@@ -305,21 +343,32 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 		relation = sum([height/y, width/x])/2
 
 	i = 1
+	contornos = []
 	for cont in contours:
 		x,y,w,h = cv.boundingRect(cont)
 		area = w*h
-		if area < max_area and area > min_area:
-			mx = x,y,w,h
-			# pprint.pprint(mx)
-			roi=cdstP[y:y+h,x:x+w]
+		contornos.append((x,y,w-1,h-1,area))
 
-			acta = get_acta(actas, (x,y,x+w,y+h), relation)
-			if acta:
-				cv.imwrite(os.path.join(outputpath,'{0}.png'.format(acta)), roi)
-			else:
-				cv.imwrite(os.path.join(outputpath,'{0}_crop_{1}.png'.format(filename,i)), roi)
+	contornos.sort(key=lambda x: x[4])
+	# pprint.pprint(contornos)
+	for c in contornos[:-2]:
+		x,y,w,h,area = c
+		# print((x,y,w,h,area))
+		# if area < max_area and area > min_area :
+		mx = x,y,w,h
+		# pprint.pprint(mx)
+		roi=final[y:y+h,x:x+w]
 
-			i = i + 1
+		acta = get_acta(actas, (x,y,x+w,y+h), relation)
+		# acta = None
+		if acta:
+			cv.imwrite(os.path.join(outputpath,'{0}.{1}'.format(acta,cfg.imgext)), roi)
+		else:
+			cv.imwrite(os.path.join(outputpath,'{0}_crop_{1}.{2}'.format(filename,i,cfg.imgext)), roi)
+
+		i = i + 1
+
+	return i-1
 
 def get_acta(actas, region, r):
 
@@ -332,9 +381,115 @@ def get_acta(actas, region, r):
 
 def process_lines(lista, in_res):
 
+	verticales = [l for l in lista if l[0] == l[2]]
+	horizontales = [l for l in lista if l[1] == l[3]]
+
+	xs = list(chain(*[(l[0], l[2]) for l in horizontales]))
+	ys = list(chain(*[(l[1], l[3]) for l in horizontales]))
+
+	min_x = min(xs) - 20
+	max_x = max(xs) + 20
+	min_y = min(ys)
+	max_y = max(ys)
+
+	############################################################################
+	# Resolver el problema de falta de linea horizontal al final
+	############################################################################
+	bottom = int(3300*300/cfg.resolution)
+	dif = bottom-max_y
+	max_y = max_y if dif <= 50 else bottom
+
+	newlista = horizontales
+	newlista.extend(verticales)
+
+	############################################################################
+	# Bajo el recorte del top
+	############################################################################
+	for i, e in enumerate(newlista):
+		newlista[i][1] = min_y+10 if e[1] == min_y else e[1] 
+		newlista[i][3] = min_y+10 if e[3] == min_y else e[3]
+
+	min_y = min_y + 10
+
+	############################################################################
+	# Agrego un recuadro
+	############################################################################
+	newlista.append([min_x, min_y, max_x, min_y])
+	newlista.append([min_x, min_y, min_x, max_y])
+	newlista.append([min_x, max_y, max_x, max_y])
+	newlista.append([max_x, max_y, max_x, min_y])
+
+	############################################################################
+	# Simplificación de líneas
+	############################################################################
+	newlista = simplificar(simplificar(newlista, pair=1), pair=2)
+	newlista = list(map(list,set(map(tuple,newlista))))
+
+	############################################################################
+	# Conectar lineas horizontales con las verticales
+	############################################################################
+	newlista = conectar_horizontales(newlista)
+
+	return(newlista)
+
+def simplificar(mylista, pair, level=5):
+
+	xs = list(chain(*[(l[pair-1], l[pair+1]) for l in mylista]))
+	xs.sort()
+
+	lista = []
+
+	for i,p in enumerate(xs):
+		if i>0:
+			if p - (xs[i-1]) <= level:
+				lista.append((p,lista[i-1][1]))
+			else:
+				grupo = grupo + 1 
+				lista.append((p,grupo))
+		else:
+			grupo = 1
+			lista.append((p,grupo))
+
+	px = dict(lista)
+	aprox = {}
+	for key, group in groupby(lista, key=lambda x: x[1]):
+		aprox[key] = statistics.median_low(i for i, j in group)
+
+	newlist = mylista[:]
+
+	if pair == 1:
+		for i,e in enumerate(newlist):
+			newlist[i] = [aprox[px[e[0]]], e[1], aprox[px[e[2]]], e[3]]
+	else:
+		for i,e in enumerate(newlist):
+			newlist[i] = [e[0], aprox[px[e[1]]], e[2], aprox[px[e[3]]]]
+
+	return newlist
+
+def conectar_horizontales(mylista, level=50):
+  
+  newlist = mylista[:]
+
+  verticales = [l for l in mylista if l[0] == l[2]]
+  horizontales = [l for l in mylista if l[1] == l[3]]
+  
+  xvert = {}
+  for i in [l[0] for l in verticales]:
+    for j in range(0, level):
+      xvert[i+j] = i
+      xvert[i-j] = i
+
+  for i,l in enumerate(horizontales):
+    horizontales[i][0] = xvert.get(horizontales[i][0],horizontales[i][0])
+    horizontales[i][2] = xvert.get(horizontales[i][2],horizontales[i][2])
+  
+  return newlist
+
+def process_lines_2(lista, in_res):
+
 	top = int(240*300/cfg.resolution)
 	left= int(80*300/cfg.resolution)
-	# bottom = int(3260*in_res/300)
+	# bottom = int(3300*in_res/300)
 	# right = int(2300*in_res/300)
 
 	############################################################################
@@ -354,9 +509,14 @@ def process_lines(lista, in_res):
 	puntos.extend([(l[2],l[3]) for l in lista])
 
 	min_x = min([x for x,y in puntos]) - 50
-	min_y = min([y for x,y in puntos])
 	max_x = max([x for x,y in puntos]) + 50
+	min_y = min([y for x,y in puntos])
 	max_y = max([y for x,y in puntos])
+
+	# print(bottom)
+	# print(max_y)
+
+	# max_y = max_y if max_y > bottom else bottom
 
 	lista.append([min_x, min_y, max_x, min_y])
 	lista.append([min_x, min_y, min_x, max_y])
@@ -369,24 +529,24 @@ def process_lines(lista, in_res):
 	# level = 55
 	# aprox = {0:{}, 1:{}}
 	# for i in (0,1):
+	# 	# pprint.pprint(list(zip(*[(e[0+i], e[2+i]) for e in lista])))
+
 	# 	valor = list(sum(list(zip(*[(e[0+i], e[2+i]) for e in lista])), ()))
-	# 	print(valor)
 	# 	for e in valor:
 	# 		if e not in aprox[i]:
 	# 			aprox[i].update({e-x: e for x in range(-level, level + 1, 1)})
+
 	# for i,e in enumerate(lista):
 	# 	lista[i][0] = aprox[0][e[0]]
 	# 	lista[i][1] = aprox[1][e[1]]
 	# 	lista[i][2] = aprox[0][e[2]]
 	# 	lista[i][3] = aprox[1][e[3]]
 
-
 	############################################################################
-	# Simplifico las líneas
+	# Simplifico las líneas horizontales
 	############################################################################
 	level = 55
 	aprox = {0:{}, 1:{}}
-
 	i = 0
 	valor = list(sum(list(zip(*[(e[0+i], e[2+i]) for e in lista])), ()))
 	for e in valor:
@@ -403,6 +563,7 @@ def process_lines(lista, in_res):
 	lista.sort()
 	lista = list(e for e,_ in itertools.groupby(lista))
 
+	# pprint.pprint(lista)
 	return(lista)
 
 def remove_lines(lista, maxtop, maxbottom):
@@ -425,7 +586,7 @@ def add_box(lista, top, bottom, right, left):
 	lista.append([min_x, max_y, max_x, max_y])
 	lista.append([max_x, max_y, max_x, min_y])
 
-def simplificar(mylista, level=5):
+def simplificar2(mylista, level=5):
 
 	aprox = {0:{}, 1:{}}
 
@@ -465,9 +626,11 @@ def get_actas(html):
 
 def process_pdf(pdf_file, force_page=None):
 
-	print()
-
+	lista_actas = []
+	total_actas = 0
+	total_regions = 0
 	total_pages = count_pages(pdf_file)
+
 	if not force_page:
 		firstp = cfg.ignore_first_pages+1
 		endp = (total_pages-cfg.ignore_last_pages)+1
@@ -519,7 +682,11 @@ def process_pdf(pdf_file, force_page=None):
 		img_file = "pagina-{0}.png".format(str(p).zfill(maxz))
 		img_file = os.path.join(workpath, img_file)
 
-		crop_regions(img_file, workpath, outputpath, metadata=get_actas(html))
+		actas = get_actas(html)
+		lista_actas.extend([a[2] for a in actas[2]])
+		total_actas = total_actas + (len(actas[2]) if actas is not None else 0)
+
+		total_regions = total_regions + crop_regions(img_file, workpath, outputpath, metadata=actas)
 
 		widgets[0] = FormatLabel('[Página {0} de {1}]'.format(i,num_bars))
 		loginfo("Extract page {0} of {1}".format(i,num_bars))
@@ -527,11 +694,26 @@ def process_pdf(pdf_file, force_page=None):
 		i = i + 1
 
 	loginfo("Remove temp dir")
+
+	bar.finish()
 	if args.debug_page:
 		print(workpath)
 	else:
 		shutil.rmtree(workpath)
-	bar.finish()
+
+
+	actas_error=[]
+	for a in lista_actas:
+		if not os.path.isfile(os.path.join(outputpath,'{0}.{1}'.format(a,cfg.imgext))):
+			actas_error.append(a)
+
+	print("Total de actas               : {0}".format(total_actas))
+	print("Total de regiones recortadas : {0}".format(total_regions))
+	if actas_error:
+		print("Actas no encontradas         : {0}".format(",".join(actas_error)))
+
+	if force_page:
+		print("Actas encontradas            : {0}".format(",".join(lista_actas)))
 
 	loginfo("Finish process")
 
@@ -565,4 +747,3 @@ if __name__ == "__main__":
 		process_pdf(args.pdffile, args.debug_page)
 	else:
 		cmdparser.print_help()
-
