@@ -245,6 +245,8 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 		return -1
 
 	height, width, channels = src.shape
+	if cfg.save_process_files:
+		cv.imwrite(os.path.join(workpath,'01.original.png'), src)
 
 	############################################################################
 	# Me quedo solo con el color de las lineas rectas y el texto b y n (negativo)
@@ -252,7 +254,7 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 	mask_bw_negative = cv.inRange(src, cfg.linecolor_from, cfg.linecolor_to)
 
 	if cfg.save_process_files:
-		cv.imwrite(os.path.join(workpath,'mask_bw_negative.png'), mask_bw_negative)
+		cv.imwrite(os.path.join(workpath,'02.mask_bw_negative.png'), mask_bw_negative)
 
 	############################################################################
 	# Quito artefactos de hasta una cierta superficie
@@ -267,68 +269,66 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 			clean_mask[output == i + 1] = 255
 	############################################################################
 
-	final = np.copy(src)
-	final_con_lineas = np.copy(src)
-	height, width, channels = final.shape
-	blank_image = np.zeros((height,width,3), np.uint8)
+	original_con_lineas = np.copy(src)
 
 	############################################################################
 	# Remuevo las líneas para recortar luego sin estas
 	############################################################################
 	clean_mask = cv.cvtColor(clean_mask, cv.COLOR_BGR2GRAY)
 	ret, clean_mask = cv.threshold(clean_mask, 10, 255, cv.THRESH_BINARY)
-	# clean_mask = cv.bitwise_not(clean_mask)
-	mask = cv.bitwise_not(final,final,mask=clean_mask)
-	final = cv.bitwise_and(final, mask)			
+
+	height, width, channels = src.shape
+	blank_image = np.zeros((height,width,3), np.uint8)
+	blank_image = cv.bitwise_not(blank_image)
+
+	# get first masked value (foreground)
+	fg = cv.bitwise_or(blank_image, blank_image, mask=clean_mask)
+	bg = cv.bitwise_or(src, src, mask=cv.bitwise_not(clean_mask))
+	final = cv.bitwise_or(fg, bg)
 
 	if cfg.save_process_files:
-		cv.imwrite(os.path.join(workpath,'clean_mask.png'), clean_mask)
+		cv.imwrite(os.path.join(workpath,'03.clean_mask.png'), clean_mask)
 	
 	if cfg.save_process_files:
-		cv.imwrite(os.path.join(workpath,'original_sin_lineas.png'), final)
-
+		cv.imwrite(os.path.join(workpath,'04.original_sin_lineas.png'), final)
 	############################################################################
 
-	cv.imshow("clean_mask Image", clean_mask)
-	cv.imshow("final Image", final)
-	cv.waitKey(0)
 
-
-	kernel = np.ones((3,3),np.uint8)
+	############################################################################
+	# Engroso la máscara para no perder lineas rectas
+	############################################################################
+	kernel = np.ones((7,7),np.uint8)
 	clean_mask_gray = cv.dilate(clean_mask,kernel,iterations = 1)
-
 
 	############################################################################
 	# Detección de líneas rectas y generación de máscara de recorte
 	############################################################################
 	height, width, channels = final.shape
-	blank_image = np.zeros((height,width,3), np.uint8)
-	minLineLength = 300*(300/cfg.resolution)
+	crop_mask = np.zeros((height,width,3), np.uint8)
+	minLineLength = 240*(300/cfg.resolution)
 	maxLineGap = 300*(300/cfg.resolution)
-	thres = int(150*(300/cfg.resolution))
-	rho=1
-	linesP = cv.HoughLinesP(clean_mask_gray,rho, np.pi/180,thres,minLineLength = minLineLength,maxLineGap = maxLineGap)
+	thres = int(100*(300/cfg.resolution))
+	rho=0.5
+	linesP = cv.HoughLinesP(clean_mask_gray,rho, np.pi/180,thres,minLineLength=minLineLength,maxLineGap=maxLineGap)
 	if linesP is not None:
 
 		ll = [e[0] for e in np.array(linesP).tolist()]
 		ll = process_lines(ll,cfg.resolution)
 		for l in [e[1] for e in enumerate(ll)]:
-			cv.line(final_con_lineas, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
-			cv.line(blank_image, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
+			cv.line(original_con_lineas, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
+			cv.line(crop_mask, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
 
 	if cfg.save_process_files:
-		cv.imwrite(os.path.join(workpath,'blank_image.png'), blank_image)
-		cv.imwrite(os.path.join(workpath,'final_con_lineas.png'), final_con_lineas)
+		cv.imwrite(os.path.join(workpath,'05.clean_mask_gray.png'), clean_mask_gray)
+		cv.imwrite(os.path.join(workpath,'06.crop_mask.png'), crop_mask)
+		cv.imwrite(os.path.join(workpath,'07.original_con_lineas.png'), original_con_lineas)
 
 	############################################################################
 	# En base a la mascara obtengo los rectangulos de interes
 	############################################################################
-	gray = cv.cvtColor(blank_image, cv.COLOR_BGR2GRAY) # convert to grayscale
-	retval, thresh_gray = cv.threshold(gray, thresh=1, maxval=255, \
-                                   type=cv.THRESH_BINARY_INV)
-
-	image, contours, hierarchy = cv.findContours(thresh_gray,cv.RETR_CCOMP , \
-									cv.CHAIN_APPROX_SIMPLE )
+	gray = cv.cvtColor(crop_mask, cv.COLOR_BGR2GRAY) # convert to grayscale
+	retval, thresh_gray = cv.threshold(gray, thresh=1, maxval=255, type=cv.THRESH_BINARY_INV)
+	image, contours, hierarchy = cv.findContours(thresh_gray,cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE )
 
 	############################################################################
 	# Recorto los rectangulos
@@ -347,7 +347,7 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 	for cont in contours:
 		x,y,w,h = cv.boundingRect(cont)
 		area = w*h
-		contornos.append((x,y,w-1,h-1,area))
+		contornos.append((x,y,w,h,area))
 
 	contornos.sort(key=lambda x: x[4])
 	# pprint.pprint(contornos)
@@ -399,6 +399,15 @@ def process_lines(lista, in_res):
 	dif = bottom-max_y
 	max_y = max_y if dif <= 50 else bottom
 
+	############################################################################
+	# Horizontales cercanas al bottom
+	############################################################################
+	for i,l in enumerate(horizontales):
+		dif = bottom - l[1]
+		if dif <= 50:
+			horizontales[i][1] = bottom
+			horizontales[i][3] = bottom
+
 	newlista = horizontales
 	newlista.extend(verticales)
 
@@ -429,6 +438,7 @@ def process_lines(lista, in_res):
 	# Conectar lineas horizontales con las verticales
 	############################################################################
 	newlista = conectar_horizontales(newlista)
+	newlista = conectar_verticales(newlista)
 
 	return(newlista)
 
@@ -484,6 +494,26 @@ def conectar_horizontales(mylista, level=50):
     horizontales[i][2] = xvert.get(horizontales[i][2],horizontales[i][2])
   
   return newlist
+
+def conectar_verticales(mylista, level=50):
+  
+  newlist = mylista[:]
+
+  verticales = [l for l in mylista if l[0] == l[2]]
+  horizontales = [l for l in mylista if l[1] == l[3]]
+  
+  yvert = {}
+  for i in [l[1] for l in horizontales]:
+    for j in range(0, level):
+      yvert[i+j] = i
+      yvert[i-j] = i
+
+  for i,l in enumerate(verticales):
+    verticales[i][1] = yvert.get(verticales[i][1],verticales[i][1])
+    verticales[i][3] = yvert.get(verticales[i][3],verticales[i][3])
+  
+  return newlist
+
 
 def process_lines_2(lista, in_res):
 
