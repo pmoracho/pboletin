@@ -213,29 +213,10 @@ class Config:
 
 cfg = Config()
 
-def crop_regions_new(filepath, workpath, outputpath, metadata=None):
-
-	filename, _ = os.path.splitext(os.path.basename(filepath))
-
-	############################################################################
-	# Lectura inicial de la imagen
-	############################################################################
-	src = cv.imread(filepath)
-	if src is None:
-		print ('Error opening {0}!'.format(filepath))
-		return -1
-
-	height, width, channels = src.shape
-
-	if metadata:
-		(x, y, actas) = metadata
-		relation = sum([height/y, width/x])/2
-
 
 def crop_regions(filepath, workpath, outputpath, metadata=None):
 
 	filename, _ = os.path.splitext(os.path.basename(filepath))
-
 	############################################################################
 	# Lectura inicial de la imagen
 	############################################################################
@@ -354,19 +335,19 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 	for c in contornos[:-2]:
 		x,y,w,h,area = c
 		# print((x,y,w,h,area))
-		# if area < max_area and area > min_area :
-		mx = x,y,w,h
-		# pprint.pprint(mx)
-		roi=final[y:y+h,x:x+w]
+		if area < max_area and area > min_area :
+			mx = x,y,w,h
+			# pprint.pprint(mx)
+			roi=final[y:y+h,x:x+w]
 
-		acta = get_acta(actas, (x,y,x+w,y+h), relation)
-		# acta = None
-		if acta:
-			cv.imwrite(os.path.join(outputpath,'{0}.{1}'.format(acta,cfg.imgext)), roi)
-		else:
-			cv.imwrite(os.path.join(outputpath,'{0}_crop_{1}.{2}'.format(filename,i,cfg.imgext)), roi)
+			acta = get_acta(actas, (x,y,x+w,y+h), relation)
+			# acta = None
+			if acta:
+				cv.imwrite(os.path.join(outputpath,'{0}.{1}'.format(acta,cfg.imgext)), roi)
+			else:
+				cv.imwrite(os.path.join(outputpath,'{0}_crop_{1}.{2}'.format(filename,i,cfg.imgext)), roi)
 
-		i = i + 1
+			i = i + 1
 
 	return i-1
 
@@ -514,124 +495,6 @@ def conectar_verticales(mylista, level=50):
   
   return newlist
 
-
-def process_lines_2(lista, in_res):
-
-	top = int(240*300/cfg.resolution)
-	left= int(80*300/cfg.resolution)
-	# bottom = int(3300*in_res/300)
-	# right = int(2300*in_res/300)
-
-	############################################################################
-	# Establezco el valor de y minímo para que caiga debajo de la recta
-	# horizontal del titulo de página
-	############################################################################
-	lista = [[left if l[0]-(left*2) < left else l[0],
-			  l[1] if l[1] > top else top,
-		      left if l[2]-(left*2) < left else l[2],
-		      l[3] if l[3] > top else top]
-			  for l in lista]
-
-	############################################################################
-	# Agrego el recuadro completo de la pagina
-	############################################################################
-	puntos=[(l[0],l[1]) for l in lista]
-	puntos.extend([(l[2],l[3]) for l in lista])
-
-	min_x = min([x for x,y in puntos]) - 50
-	max_x = max([x for x,y in puntos]) + 50
-	min_y = min([y for x,y in puntos])
-	max_y = max([y for x,y in puntos])
-
-	# print(bottom)
-	# print(max_y)
-
-	# max_y = max_y if max_y > bottom else bottom
-
-	lista.append([min_x, min_y, max_x, min_y])
-	lista.append([min_x, min_y, min_x, max_y])
-	lista.append([min_x, max_y, max_x, max_y])
-	lista.append([max_x, max_y, max_x, min_y])
-
-	############################################################################
-	# Simplifico las líneas
-	############################################################################
-	# level = 55
-	# aprox = {0:{}, 1:{}}
-	# for i in (0,1):
-	# 	# pprint.pprint(list(zip(*[(e[0+i], e[2+i]) for e in lista])))
-
-	# 	valor = list(sum(list(zip(*[(e[0+i], e[2+i]) for e in lista])), ()))
-	# 	for e in valor:
-	# 		if e not in aprox[i]:
-	# 			aprox[i].update({e-x: e for x in range(-level, level + 1, 1)})
-
-	# for i,e in enumerate(lista):
-	# 	lista[i][0] = aprox[0][e[0]]
-	# 	lista[i][1] = aprox[1][e[1]]
-	# 	lista[i][2] = aprox[0][e[2]]
-	# 	lista[i][3] = aprox[1][e[3]]
-
-	############################################################################
-	# Simplifico las líneas horizontales
-	############################################################################
-	level = 55
-	aprox = {0:{}, 1:{}}
-	i = 0
-	valor = list(sum(list(zip(*[(e[0+i], e[2+i]) for e in lista])), ()))
-	for e in valor:
-		if e not in aprox[i]:
-			aprox[i].update({e-x: e for x in range(-level, level + 1, 1)})
-
-	for i,e in enumerate(lista):
-		lista[i][0] = aprox[0][e[0]]
-		lista[i][2] = aprox[0][e[2]]
-
-	############################################################################
-	# Ordeno y me quedo con las líneas no repetidas
-	############################################################################
-	lista.sort()
-	lista = list(e for e,_ in itertools.groupby(lista))
-
-	# pprint.pprint(lista)
-	return(lista)
-
-def remove_lines(lista, maxtop, maxbottom):
-
-	lista = [l for l in lista if l[0] > maxtop and not (l[0] > maxbottom and l[2] > maxbottom)]
-
-
-def add_box(lista, top, bottom, right, left):
-
-	puntos=[(l[0],l[1]) for l in lista]
-	puntos.extend([(l[2],l[3]) for l in lista])
-
-	min_x = min([x for x,y in puntos]) - 50*(cfg.resolution/300)
-	min_y = min([y for x,y in puntos])
-	max_x = max([x for x,y in puntos]) + 50*(cfg.resolution/300)
-	max_y = max([y for x,y in puntos])
-
-	lista.append([min_x, min_y, max_x, min_y])
-	lista.append([min_x, min_y, min_x, max_y])
-	lista.append([min_x, max_y, max_x, max_y])
-	lista.append([max_x, max_y, max_x, min_y])
-
-def simplificar2(mylista, level=5):
-
-	aprox = {0:{}, 1:{}}
-
-	for i in (0,1):
-		valor = list(sum(list(zip(*[(e[0+i], e[2+i]) for e in mylista])), ()))
-		for e in valor:
-			if e not in aprox[i]:
-				aprox[i].update({e-x: e for x in range(-level, level + 1, 1)})
-
-	for i,e in enumerate(mylista):
-		mylista[i][0] = aprox[0][e[0]]
-		mylista[i][1] = aprox[1][e[1]]
-		mylista[i][2] = aprox[0][e[2]]
-		mylista[i][3] = aprox[1][e[3]]
-
 def count_pages(filename):
 	rxcountpages = re.compile(cfg.rxcountpages, re.MULTILINE|re.DOTALL)
 	with open(filename,"rb") as f:
@@ -773,6 +636,7 @@ if __name__ == "__main__":
 		configfile = args.configfile
 
 	if args.pdffile:
+
 		cfg.set_file(configfile)
 		process_pdf(args.pdffile, args.debug_page)
 	else:
