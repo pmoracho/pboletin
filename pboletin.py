@@ -90,6 +90,7 @@ try:
 	from itertools import chain
 	from itertools import groupby
 	import statistics
+	from PIL import Image
 
 except ImportError as err:
 	modulename = err.args[0].partition("'")[-1].rpartition("'")[0]
@@ -198,13 +199,17 @@ class Config:
 		self.config.read(self.file)
 		self.__dict__.update(dict(self.config.items("GLOBAL")))
 
+		# lista
+		for e in ["imgext"]:
+			self.__dict__[e] = self.__dict__[e].split(',')
+
 		# np.array
 		for e in ["linecolor_from" , "linecolor_to"]:
 			self.__dict__[e] = np.array(list(map(int,self.__dict__[e].split(','))))
 
 		# int
 		for e in ["resolution", "artifact_min_size","ignore_first_pages","ignore_last_pages",
-			"max_area", "min_area" ]:
+			"max_area", "min_area", "jpg_compression" ]:
 			self.__dict__[e] = int(self.__dict__[e])
 
 		# booleano
@@ -217,6 +222,11 @@ cfg = Config()
 def crop_regions(filepath, workpath, outputpath, metadata=None):
 
 	filename, _ = os.path.splitext(os.path.basename(filepath))
+
+	# El calculo de todo esta hecho sobre una base de 300 dpi
+	# Hat que compensar si la resolucion es distinta
+	compensation = (cfg.resolution/300)
+
 	############################################################################
 	# Lectura inicial de la imagen
 	############################################################################
@@ -246,7 +256,7 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 	clean_mask = np.zeros((output.shape[0], output.shape[1], 3), dtype = "uint8")
 
 	for i in range(0, nb_components):
-		if sizes[i] >= cfg.artifact_min_size:
+		if sizes[i] >= cfg.artifact_min_size*compensation:
 			clean_mask[output == i + 1] = 255
 	############################################################################
 
@@ -286,9 +296,9 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 	############################################################################
 	height, width, channels = final.shape
 	crop_mask = np.zeros((height,width,3), np.uint8)
-	minLineLength = 240*(300/cfg.resolution)
-	maxLineGap = 300*(300/cfg.resolution)
-	thres = int(100*(300/cfg.resolution))
+	minLineLength = 240*compensation
+	maxLineGap = 300*compensation
+	thres = int(100*compensation)
 	rho=0.5
 	linesP = cv.HoughLinesP(clean_mask_gray,rho, np.pi/180,thres,minLineLength=minLineLength,maxLineGap=maxLineGap)
 	if linesP is not None:
@@ -311,14 +321,21 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 	retval, thresh_gray = cv.threshold(gray, thresh=1, maxval=255, type=cv.THRESH_BINARY_INV)
 	image, contours, hierarchy = cv.findContours(thresh_gray,cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE )
 
+
+	############################################################################
+	# Cramos las subcarpetas para guardar las imagenes por extensión
+	############################################################################
+	for ext in cfg.imgext:
+		opath = os.path.join(outputpath, ext)
+		os.makedirs(opath,exist_ok=True)
+
 	############################################################################
 	# Recorto los rectangulos
 	# Si las coordenadas de algun acta entran dentro de la zona de recorte
 	# Bien! podemos asociar la zona con el número de acta
 	############################################################################
-	max_area = cfg.max_area * (300/cfg.resolution)
-	min_area = cfg.min_area * (300/cfg.resolution)
-
+	max_area = cfg.max_area * compensation
+	min_area = cfg.min_area * compensation
 	if metadata:
 		(x, y, actas) = metadata
 		relation = sum([height/y, width/x])/2
@@ -330,26 +347,43 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 		area = w*h
 		contornos.append((x,y,w,h,area))
 
+	final = final.astype(np.uint8)
+
 	contornos.sort(key=lambda x: x[4])
-	# pprint.pprint(contornos)
 	for c in contornos[:-2]:
 		x,y,w,h,area = c
-		# print((x,y,w,h,area))
-		if area < max_area and area > min_area :
+		if area < max_area and area > min_area:
 			mx = x,y,w,h
-			# pprint.pprint(mx)
 			roi=final[y:y+h,x:x+w]
-
 			acta = get_acta(actas, (x,y,x+w,y+h), relation)
-			# acta = None
-			if acta:
-				cv.imwrite(os.path.join(outputpath,'{0}.{1}'.format(acta,cfg.imgext)), roi)
-			else:
-				cv.imwrite(os.path.join(outputpath,'{0}_crop_{1}.{2}'.format(filename,i,cfg.imgext)), roi)
-
+			save_crop(acta, roi, outputpath, filename, i)
 			i = i + 1
 
 	return i-1
+
+def save_crop(acta, crop, outputpath, boletin, index):
+
+	unique_colors = len(np.unique(crop.reshape(-1, crop.shape[2]), axis=0))
+	compression = [int(cv.IMWRITE_JPEG_QUALITY), cfg.jpg_compression]
+
+	for ext in cfg.imgext:
+		opath = os.path.join(outputpath, ext)
+
+		if acta:
+			f = os.path.join(opath,'{0}.{1}'.format(acta, ext))
+		else:
+			f = os.path.join(opath,'{0}_crop_{1}.{2}'.format(boletin, index, ext))
+
+		if ext.lower() == 'pcx':
+			pil_im = Image.fromarray(crop)
+			pil_im.save(f)
+		else:
+			options = compression if ext.lower() == 'jpg' else None
+			if unique_colors  <= 256:
+				crop  = cv.cvtColor(crop, cv.COLOR_BGR2GRAY)
+
+			cv.imwrite(f, crop, options)
+
 
 def get_acta(actas, region, r):
 
@@ -376,7 +410,8 @@ def process_lines(lista, in_res):
 	############################################################################
 	# Resolver el problema de falta de linea horizontal al final
 	############################################################################
-	bottom = int(3300*300/cfg.resolution)
+	bottom = int(3300*(cfg.resolution/300))
+
 	dif = bottom-max_y
 	max_y = max_y if dif <= 50 else bottom
 
@@ -501,7 +536,7 @@ def count_pages(filename):
 		data = f.read()
 	return len(rxcountpages.findall(data.decode('latin1')))
 
-def get_actas(html):
+def get_metadata(html):
 
 	x,y = 1, 1
 	rxactas = re.compile(cfg.rxpagedim, re.MULTILINE)
@@ -513,7 +548,7 @@ def get_actas(html):
 	m = re.finditer(rxactas, html)
 
 	if m:
-		return (x, y, list( (int(e.group(2)),int(e.group(1)),e.group(3)) for e in m ))
+		return (x, y, list( (int(e.group(2)),int(e.group(1)),e.group(3).replace('.','')) for e in m ))
 	else:
 		return None
 
@@ -538,7 +573,9 @@ def process_pdf(pdf_file, force_page=None):
 
 	loginfo("Create temp dir")
 	workpath = tempfile.mkdtemp()
-	outputpath = os.path.join(cfg.outputdir,pdf_file)
+
+	filename, _ = os.path.splitext(os.path.basename(pdf_file))
+	outputpath = os.path.join(cfg.outputdir,filename)
 	loginfo("Create outputp dir")
 	os.makedirs(outputpath, exist_ok=True)
 
@@ -575,7 +612,7 @@ def process_pdf(pdf_file, force_page=None):
 		img_file = "pagina-{0}.png".format(str(p).zfill(maxz))
 		img_file = os.path.join(workpath, img_file)
 
-		actas = get_actas(html)
+		actas = get_metadata(html)
 		lista_actas.extend([a[2] for a in actas[2]])
 		total_actas = total_actas + (len(actas[2]) if actas is not None else 0)
 
@@ -594,10 +631,10 @@ def process_pdf(pdf_file, force_page=None):
 	else:
 		shutil.rmtree(workpath)
 
-
 	actas_error=[]
 	for a in lista_actas:
-		if not os.path.isfile(os.path.join(outputpath,'{0}.{1}'.format(a,cfg.imgext))):
+		f = os.path.join(outputpath,cfg.imgext[0],'{0}.{1}'.format(a,cfg.imgext[0]))
+		if not os.path.isfile(f):
 			actas_error.append(a)
 
 	print("Total de actas               : {0}".format(total_actas))
