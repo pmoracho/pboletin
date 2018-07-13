@@ -25,10 +25,6 @@ pboletin
 
 Procesamiento de los boletines de marcas y patentes de Argentina
 
-+ Recorte automático de cada acta
-
-TO DO:
-	- Try / catch pdftoppm
 """
 
 __author__		= "Patricio Moracho <pmoracho@gmail.com>"
@@ -125,7 +121,7 @@ def init_argparse():
 										description="%s\n%s\n" % (__appdesc__, __copyright__),
 										epilog="",
 										add_help=True,
-										formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=50)
+										formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=45)
 	)
 
 	opciones = {	"pdffile": {
@@ -159,6 +155,20 @@ def init_argparse():
 								"dest": 	"loglevel",
 								"default":	"info",
 								"help":		_("Nivel de log")
+					},
+					"--from-page -f": {
+								"type": 	int,
+								"action": 	"store",
+								"dest": 	"from_page",
+								"default":	None,
+								"help":		_("Desde que página se procesará del PDF")
+					},
+					"--to-page -t": {
+								"type": 	int,
+								"action": 	"store",
+								"dest": 	"to_page",
+								"default":	None,
+								"help":		_("Hasta que página se procesará del PDF")
 					},
 					"--quiet -q": {
 								"action": 	"store_true",
@@ -209,7 +219,7 @@ class Config:
 
 		# int
 		for e in ["resolution", "artifact_min_size","ignore_first_pages","ignore_last_pages",
-			"max_area", "min_area", "jpg_compression" ]:
+			"max_area", "min_area", "jpg_compression", "remove_pixels" ]:
 			self.__dict__[e] = int(self.__dict__[e])
 
 		# booleano
@@ -349,12 +359,13 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 
 	final = final.astype(np.uint8)
 
+	remove = cfg.remove_pixels if cfg.remove_pixels else 0
 	contornos.sort(key=lambda x: x[4])
 	for c in contornos[:-2]:
 		x,y,w,h,area = c
 		if area < max_area and area > min_area:
 			mx = x,y,w,h
-			roi=final[y:y+h,x:x+w]
+			roi=final[y+remove:(y+remove)+(h-remove),x+remove:(x+remove)+(w-remove)]
 			acta = get_acta(actas, (x,y,x+w,y+h), relation)
 			save_crop(acta, roi, outputpath, filename, i)
 			i = i + 1
@@ -560,9 +571,9 @@ def process_pdf(pdf_file, force_page=None):
 	total_pages = count_pages(pdf_file)
 
 	if not force_page:
-		firstp = cfg.ignore_first_pages+1
-		endp = (total_pages-cfg.ignore_last_pages)+1
-		num_bars = (total_pages-cfg.ignore_last_pages-cfg.ignore_first_pages)
+		firstp = args.from_page if args.from_page else (cfg.ignore_first_pages+1)
+		endp = args.to_page if args.to_page else (total_pages-cfg.ignore_last_pages)+1
+		num_bars = (endp - firstp) + 1
 	else:
 		firstp = force_page
 		endp = force_page + 1
@@ -583,7 +594,7 @@ def process_pdf(pdf_file, force_page=None):
 	maxz = len(str(total_pages))
 	i=1
 
-	for p in range(firstp,endp):
+	for p in range(firstp,endp+1):
 
 		cmdline = '{0} -png -f {3} -l {4} -r {5} {1} {2}/pagina'.format(
 			cfg.pdftoppm_bin,
@@ -656,6 +667,7 @@ if __name__ == "__main__":
 	cmdparser = init_argparse()
 	try:
 		args = cmdparser.parse_args()
+
 	except IOError as msg:
 		cmdparser.error(str(msg))
 		sys.exit(-1)
