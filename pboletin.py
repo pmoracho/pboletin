@@ -67,7 +67,7 @@ try:
 	import numpy as np
 	import glob
 	from operator import itemgetter
-	import pprint
+	# import pprint
 	import itertools
 	import os
 	import argparse
@@ -155,6 +155,14 @@ def init_argparse():
 								"dest": 	"loglevel",
 								"default":	"info",
 								"help":		_("Nivel de log")
+					},
+					"--log-file -l": {
+								"type": 	str,
+								"action": 	"store",
+								"dest": 	"logfile",
+								"default":	None,
+								"help":		_("Archivo de log"),
+								"metavar":  "file"
 					},
 					"--from-page -f": {
 								"type": 	int,
@@ -571,12 +579,17 @@ def process_pdf(pdf_file, force_page=None):
 	total_pages = count_pages(pdf_file)
 
 	if not force_page:
-		firstp = args.from_page if args.from_page else (cfg.ignore_first_pages+1)
-		endp = args.to_page if args.to_page else (total_pages-cfg.ignore_last_pages)+1
+		if cfg.detect_export_pages:
+			firstp = 1
+			endp = total_pages 
+		else:
+			firstp = args.from_page if args.from_page else (cfg.ignore_first_pages+1)
+			endp = args.to_page if args.to_page else (total_pages-cfg.ignore_last_pages)+1
+
 		num_bars = (endp - firstp) + 1
 	else:
 		firstp = force_page
-		endp = force_page + 1
+		endp = force_page
 		num_bars = 1
 
 	widgets = [FormatLabel(''), ' ', Percentage(), ' ', Bar('#'), ' ', ETA(), ' ', RotatingMarker()]
@@ -624,13 +637,18 @@ def process_pdf(pdf_file, force_page=None):
 		img_file = os.path.join(workpath, img_file)
 
 		actas = get_metadata(html)
-		lista_actas.extend([a[2] for a in actas[2]])
-		total_actas = total_actas + (len(actas[2]) if actas is not None else 0)
+		loginfo(str(actas))
 
-		total_regions = total_regions + crop_regions(img_file, workpath, outputpath, metadata=actas)
+		if not cfg.detect_export_pages or (cfg.detect_export_pages and len(actas[2]) > 0) :
 
-		widgets[0] = FormatLabel('[Página {0} de {1}]'.format(i,num_bars))
-		loginfo("Extract page {0} of {1}".format(i,num_bars))
+			lista_actas.extend([a[2] for a in actas[2]])
+			total_actas = total_actas + (len(actas[2]) if actas is not None else 0)
+
+			total_regions = total_regions + crop_regions(img_file, workpath, outputpath, metadata=actas)
+
+			widgets[0] = FormatLabel('[Página {0} de {1}]'.format(i,num_bars))
+			loginfo("Extract page {0} of {1}".format(i,num_bars))
+
 		bar.update(i)
 		i = i + 1
 
@@ -686,7 +704,26 @@ if __name__ == "__main__":
 
 	if args.pdffile:
 
-		cfg.set_file(configfile)
-		process_pdf(args.pdffile, args.debug_page)
+
+		if args.logfile:
+			log_level = getattr(logging, args.loglevel.upper(), None)
+			logging.basicConfig(filename=args.logfile, level=log_level, format='%(asctime)s|%(levelname)s|%(message)s', datefmt='%Y/%m/%d %I:%M:%S', filemode='w')	
+
+		try:
+			cfg.set_file(configfile)
+		except IOError as msg:
+			cmdparser.error(str(msg))
+			sys.exit(-1)
+
+		if args.debug_page:
+			cfg.save_process_files = True
+
+		try:
+			args.pdffile = os.path.join(cfg.inputdir, args.pdffile)
+			process_pdf(args.pdffile, args.debug_page)
+		except IOError as msg:
+			cmdparser.error("No se ha encontrado el archivo {0}".format(args.pdffile))
+			sys.exit(-1)
+
 	else:
 		cmdparser.print_help()
