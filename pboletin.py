@@ -87,6 +87,7 @@ try:
 	from itertools import groupby
 	import statistics
 	from PIL import Image
+	from struct import *
 
 except ImportError as err:
 	modulename = err.args[0].partition("'")[-1].rpartition("'")[0]
@@ -221,29 +222,34 @@ class Config:
 		for e in ["imgext"]:
 			self.__dict__[e] = self.__dict__[e].split(',')
 
+		# lista in
+		for e in ["remove_pixels"]:
+			self.__dict__[e] = list(map(int,self.__dict__[e].split(',')))
+
 		# np.array
 		for e in ["linecolor_from" , "linecolor_to"]:
 			self.__dict__[e] = np.array(list(map(int,self.__dict__[e].split(','))))
 
 		# int
 		for e in ["resolution", "artifact_min_size","ignore_first_pages","ignore_last_pages",
-			"max_area", "min_area", "jpg_compression", "remove_pixels" ]:
+			"max_area", "min_area", "jpg_compression", "h_line_gap", "v_line_gap" ]:
 			self.__dict__[e] = int(self.__dict__[e])
 
 		# booleano
 		for e in ["save_process_files"]:
 			self.__dict__[e] = True if self.__dict__[e] == "True" else False
 
+		self.compensation = self.resolution/300
+
 cfg = Config()
 
-
-def crop_regions(filepath, workpath, outputpath, metadata=None):
+def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 
 	filename, _ = os.path.splitext(os.path.basename(filepath))
 
 	# El calculo de todo esta hecho sobre una base de 300 dpi
-	# Hat que compensar si la resolucion es distinta
-	compensation = (cfg.resolution/300)
+	# Hay que compensar si la resolucion es distinta
+	cfg.compensation = (cfg.resolution/300)
 
 	############################################################################
 	# Lectura inicial de la imagen
@@ -254,16 +260,11 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 		return -1
 
 	height, width, channels = src.shape
-	if cfg.save_process_files:
-		cv.imwrite(os.path.join(workpath,'01.original.png'), src)
 
 	############################################################################
 	# Me quedo solo con el color de las lineas rectas y el texto b y n (negativo)
 	############################################################################
 	mask_bw_negative = cv.inRange(src, cfg.linecolor_from, cfg.linecolor_to)
-
-	if cfg.save_process_files:
-		cv.imwrite(os.path.join(workpath,'02.mask_bw_negative.png'), mask_bw_negative)
 
 	############################################################################
 	# Quito artefactos de hasta una cierta superficie
@@ -274,7 +275,7 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 	clean_mask = np.zeros((output.shape[0], output.shape[1], 3), dtype = "uint8")
 
 	for i in range(0, nb_components):
-		if sizes[i] >= cfg.artifact_min_size*compensation:
+		if sizes[i] >= cfg.artifact_min_size*cfg.compensation:
 			clean_mask[output == i + 1] = 255
 	############################################################################
 
@@ -294,14 +295,7 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 	fg = cv.bitwise_or(blank_image, blank_image, mask=clean_mask)
 	bg = cv.bitwise_or(src, src, mask=cv.bitwise_not(clean_mask))
 	final = cv.bitwise_or(fg, bg)
-
-	if cfg.save_process_files:
-		cv.imwrite(os.path.join(workpath,'03.clean_mask.png'), clean_mask)
-	
-	if cfg.save_process_files:
-		cv.imwrite(os.path.join(workpath,'04.original_sin_lineas.png'), final)
 	############################################################################
-
 
 	############################################################################
 	# Engroso la máscara para no perder lineas rectas
@@ -314,9 +308,9 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 	############################################################################
 	height, width, channels = final.shape
 	crop_mask = np.zeros((height,width,3), np.uint8)
-	minLineLength = 240*compensation
-	maxLineGap = 300*compensation
-	thres = int(100*compensation)
+	minLineLength = 240*cfg.compensation
+	maxLineGap = 300*cfg.compensation
+	thres = int(100*cfg.compensation)
 	rho=0.5
 	linesP = cv.HoughLinesP(clean_mask_gray,rho, np.pi/180,thres,minLineLength=minLineLength,maxLineGap=maxLineGap)
 	if linesP is not None:
@@ -328,6 +322,10 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 			cv.line(crop_mask, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
 
 	if cfg.save_process_files:
+		cv.imwrite(os.path.join(workpath,'01.original.png'), src)
+		cv.imwrite(os.path.join(workpath,'02.mask_bw_negative.png'), mask_bw_negative)
+		cv.imwrite(os.path.join(workpath,'03.clean_mask.png'), clean_mask)
+		cv.imwrite(os.path.join(workpath,'04.original_sin_lineas.png'), final)
 		cv.imwrite(os.path.join(workpath,'05.clean_mask_gray.png'), clean_mask_gray)
 		cv.imwrite(os.path.join(workpath,'06.crop_mask.png'), crop_mask)
 		cv.imwrite(os.path.join(workpath,'07.original_con_lineas.png'), original_con_lineas)
@@ -338,7 +336,6 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 	gray = cv.cvtColor(crop_mask, cv.COLOR_BGR2GRAY) # convert to grayscale
 	retval, thresh_gray = cv.threshold(gray, thresh=1, maxval=255, type=cv.THRESH_BINARY_INV)
 	image, contours, hierarchy = cv.findContours(thresh_gray,cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE )
-
 
 	############################################################################
 	# Cramos las subcarpetas para guardar las imagenes por extensión
@@ -352,8 +349,8 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 	# Si las coordenadas de algun acta entran dentro de la zona de recorte
 	# Bien! podemos asociar la zona con el número de acta
 	############################################################################
-	max_area = cfg.max_area * compensation
-	min_area = cfg.min_area * compensation
+	max_area = cfg.max_area * cfg.compensation
+	min_area = cfg.min_area * cfg.compensation
 	if metadata:
 		(x, y, actas) = metadata
 		relation = sum([height/y, width/x])/2
@@ -367,23 +364,110 @@ def crop_regions(filepath, workpath, outputpath, metadata=None):
 
 	final = final.astype(np.uint8)
 
-	remove = cfg.remove_pixels if cfg.remove_pixels else 0
+	remove = cfg.remove_pixels if cfg.remove_pixels else [0,0,0,0]
 	contornos.sort(key=lambda x: x[4])
-	for c in contornos[:-2]:
-		x,y,w,h,area = c
+	for recorte in contornos[:-2]:
+		x,y,w,h,area = recorte
 		if area < max_area and area > min_area:
-			mx = x,y,w,h
-			roi=final[y+remove:(y+remove)+(h-remove),x+remove:(x+remove)+(w-remove)]
+
 			acta = get_acta(actas, (x,y,x+w,y+h), relation)
-			save_crop(acta, roi, outputpath, filename, i)
-			i = i + 1
+
+			roi = final[y:y+h,x:x+w]
+			roi = get_main_area(roi, acta)
+			
+			i = i + save_crop(acta, roi, outputpath, filename, i, last_acta)
 
 	return i-1
 
-def save_crop(acta, crop, outputpath, boletin, index):
+
+def get_main_area(img, acta):
+
+	remove = cfg.remove_pixels if cfg.remove_pixels else [0,0,0,0]
+
+	gray = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
+	ret,thresh = cv.threshold(gray,127,255,cv.THRESH_BINARY_INV)
+	kernel = np.ones((7,7),np.uint8)
+	gray = cv.dilate(thresh,kernel,iterations = 1)
+	im2, ctrs, hier = cv.findContours(gray.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+	l = [(t[0], t[1], t[0]+t[2], t[1]+t[3])  for t in [cv.boundingRect(ctr) for ctr in ctrs]]
+	height, width, channels = img.shape
+
+	
+	if not l:
+		# No hay zonas de interes posiblemente imagen en blanco
+		l = [(0,0,width,height)]
+
+	lmin = list(map(min, zip(*l)))
+	lmax = list(map(max, zip(*l)))
+
+	add = 5
+	seguridad = (
+		lmin[0]-add if lmin[0]-add > 0 else 0,
+		lmin[1]-add if lmin[1]-add > 0 else 0,
+		lmax[2]+add if lmax[2]+add < width else width,
+		lmax[3]+add if lmax[3]+add < height else height
+	)
+
+	x1 = seguridad[0] if seguridad[0]<remove[0] else remove[0]
+	y1 = seguridad[1] if seguridad[1]<remove[1] else remove[1]
+	x2 = seguridad[2] if seguridad[2]>width-remove[2] else width-remove[2]
+	y2 = seguridad[3] if seguridad[3]>height-remove[3] else height-remove[3]
+
+	crop = (x1, y1, x2, y2)
+
+	loginfo("Acta             : {0}".format(acta))
+	loginfo("Recorte seguridad: {0}".format(str(seguridad)))
+	loginfo("Recorte final    : {0}".format(str(crop)))
+	
+	roi = img[crop[1]:crop[1]+crop[3], crop[0]:crop[0]+crop[2]]
+	return roi
+
+def save_crop(acta, crop, outputpath, boletin, index, last_acta):
+
 
 	unique_colors = len(np.unique(crop.reshape(-1, crop.shape[2]), axis=0))
 	compression = [int(cv.IMWRITE_JPEG_QUALITY), cfg.jpg_compression]
+
+	if unique_colors <= 1:
+		return 0
+
+	if not acta and last_acta:
+		ext_compat = [e for e in cfg.imgext if e not in ['pcx']][0]
+
+		last_file = os.path.join(outputpath, ext_compat,'{0}.{1}'.format(last_acta, ext_compat))
+		last_img = cv.imread(last_file)			
+
+		max_width = 0 # find the max width of all the images
+		total_height = 0 # the total height of the images (vertical stacking)
+		images = [last_img, crop]
+		for img in images:
+			if img.shape[1] > max_width:
+				max_width = img.shape[1]
+			total_height += img.shape[0]
+
+		merged = np.zeros((total_height,max_width,3),dtype=np.uint8)
+
+		current_y = 0 # keep track of where your current image was last placed in the y coordinate
+		for image in images:
+			merged[current_y:image.shape[0]+current_y,:image.shape[1],:] = image
+			current_y += image.shape[0]
+
+		for ext in cfg.imgext:
+
+			f = os.path.join(outputpath, ext, '{0}.merged.{1}'.format(last_acta, ext))
+
+			if ext.lower() == 'pcx':
+				pil_im = Image.fromarray(merged)
+				pil_im.save(f)
+			else:
+				if unique_colors  <= 256:
+					merged = cv.cvtColor(merged, cv.COLOR_BGR2GRAY)
+
+				if ext.lower() == 'jpg':
+					cv.imwrite(f, merged, compression)
+					add_resolution_to_jpg(f,cfg.resolution) 
+				else:
+					cv.imwrite(f, merged, compression)
 
 	for ext in cfg.imgext:
 		opath = os.path.join(outputpath, ext)
@@ -397,12 +481,16 @@ def save_crop(acta, crop, outputpath, boletin, index):
 			pil_im = Image.fromarray(crop)
 			pil_im.save(f)
 		else:
-			options = compression if ext.lower() == 'jpg' else None
 			if unique_colors  <= 256:
 				crop  = cv.cvtColor(crop, cv.COLOR_BGR2GRAY)
 
-			cv.imwrite(f, crop, options)
+			if ext.lower() == 'jpg':
+				cv.imwrite(f, crop, compression)
+				add_resolution_to_jpg(f,cfg.resolution) 
+			else:
+				cv.imwrite(f, crop, compression)
 
+	return 1
 
 def get_acta(actas, region, r):
 
@@ -472,8 +560,8 @@ def process_lines(lista, in_res):
 	############################################################################
 	# Conectar lineas horizontales con las verticales
 	############################################################################
-	newlista = conectar_horizontales(newlista)
-	newlista = conectar_verticales(newlista)
+	newlista = conectar_horizontales(newlista, int(cfg.h_line_gap*cfg.compensation))
+	newlista = conectar_verticales(newlista, int(cfg.v_line_gap*cfg.compensation))
 
 	return(newlista)
 
@@ -549,15 +637,33 @@ def conectar_verticales(mylista, level=50):
   
   return newlist
 
-def count_pages(filename):
+def pdf_count_pages(filename):
+	"""pdf_get_metadata: cuenta la cantidad de páginas de un PDF
+
+	Args:
+		filename(str): Path completo al archivo PDF
+	"""
 	rxcountpages = re.compile(cfg.rxcountpages, re.MULTILINE|re.DOTALL)
 	with open(filename,"rb") as f:
 		data = f.read()
 	return len(rxcountpages.findall(data.decode('latin1')))
 
 def get_metadata(html):
+	"""get_metadata: extrae información del boletin en el PDF
 
-	x,y = 1, 1
+	El boletin convertido de PDF -> HTML, se procesa con patrones
+	regulares configurables en el INI para exxtraer la información
+	necesaria de la página procesada:
+		- Tamaño x, y de la página
+		- # acta
+		- Posición x,y del # acta en la página
+
+	Args:
+		html(str): Cadena completa html de la página a procesar.
+
+	"""
+
+	x, y = 1, 1
 	rxactas = re.compile(cfg.rxpagedim, re.MULTILINE)
 	t = re.findall(rxactas, html)
 	if t:
@@ -571,12 +677,39 @@ def get_metadata(html):
 	else:
 		return None
 
+def add_resolution_to_jpg(filename, resolution):
+	"""add_resolution_to_jpg: Agrega info de la resolución al archivo
+
+	Debido a problemas a la hora de incrustar imagenes en el Word resulta
+	necesario agregar al header del JPG la información de la resolución
+	Vertical y horizontal, debido a que opencv no salva esta información.
+
+	Args:
+		filename (str): Path completo al archivo jpg
+		resolution (int): Resolución
+
+	Example:
+		>>> add_resolution_to_jpg("c:\prueba.jpg", 150) # 150 dpi
+
+	"""
+	struct_fmt = '>6s5sHBHH'
+	struct_len = calcsize(struct_fmt)
+
+	with open(filename, "rb") as f:
+		header = unpack(struct_fmt, f.read(struct_len))
+		data = f.read()
+
+	with open(filename, "wb") as f:
+		f.write(pack(struct_fmt, header[0], header[1], header[2], header[3], resolution, resolution))
+		f.write(data)
+
+
 def process_pdf(pdf_file, force_page=None):
 
 	lista_actas = []
 	total_actas = 0
 	total_regions = 0
-	total_pages = count_pages(pdf_file)
+	total_pages = pdf_count_pages(pdf_file)
 
 	if not force_page:
 		if cfg.detect_export_pages:
@@ -609,6 +742,7 @@ def process_pdf(pdf_file, force_page=None):
 
 	for p in range(firstp,endp+1):
 
+		loginfo("Extract page {0} of {1}".format(i,num_bars))
 		cmdline = '{0} -png -f {3} -l {4} -r {5} {1} {2}/pagina'.format(
 			cfg.pdftoppm_bin,
 			pdf_file,
@@ -617,6 +751,7 @@ def process_pdf(pdf_file, force_page=None):
 			p,
 			cfg.resolution
 		)
+		loginfo(cmdline)
 		with subprocess.Popen(cmdline, shell=True) as proc:
 			pass
 
@@ -627,6 +762,7 @@ def process_pdf(pdf_file, force_page=None):
 			p,
 			p
 		)
+		loginfo(cmdline)
 		with subprocess.Popen(cmdline, shell=True) as proc:
 			pass
 
@@ -637,17 +773,18 @@ def process_pdf(pdf_file, force_page=None):
 		img_file = os.path.join(workpath, img_file)
 
 		actas = get_metadata(html)
-		loginfo(str(actas))
+		loginfo("Actas encontradas: {0}".format(str(actas)))
 
 		if not cfg.detect_export_pages or (cfg.detect_export_pages and len(actas[2]) > 0) :
+
+			last_acta = lista_actas[-1] if lista_actas else None
 
 			lista_actas.extend([a[2] for a in actas[2]])
 			total_actas = total_actas + (len(actas[2]) if actas is not None else 0)
 
-			total_regions = total_regions + crop_regions(img_file, workpath, outputpath, metadata=actas)
+			total_regions = total_regions + crop_regions(img_file, workpath, outputpath, last_acta=last_acta, metadata=actas)
 
 			widgets[0] = FormatLabel('[Página {0} de {1}]'.format(i,num_bars))
-			loginfo("Extract page {0} of {1}".format(i,num_bars))
 
 		bar.update(i)
 		i = i + 1
@@ -704,12 +841,12 @@ if __name__ == "__main__":
 
 	if args.pdffile:
 
-
 		if args.logfile:
 			log_level = getattr(logging, args.loglevel.upper(), None)
 			logging.basicConfig(filename=args.logfile, level=log_level, format='%(asctime)s|%(levelname)s|%(message)s', datefmt='%Y/%m/%d %I:%M:%S', filemode='w')	
 
 		try:
+			loginfo("Config file: {0}".format(configfile))
 			cfg.set_file(configfile)
 		except IOError as msg:
 			cmdparser.error(str(msg))
@@ -718,12 +855,9 @@ if __name__ == "__main__":
 		if args.debug_page:
 			cfg.save_process_files = True
 
-		try:
-			args.pdffile = os.path.join(cfg.inputdir, args.pdffile)
-			process_pdf(args.pdffile, args.debug_page)
-		except IOError as msg:
-			cmdparser.error("No se ha encontrado el archivo {0}".format(args.pdffile))
-			sys.exit(-1)
+		args.pdffile = os.path.join(cfg.inputdir, args.pdffile)
+		loginfo("Proces PDF : {0}".format(args.pdffile))
+		process_pdf(args.pdffile, args.debug_page)
 
 	else:
 		cmdparser.print_help()

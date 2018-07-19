@@ -3,3 +3,5 @@
 /build
 /pboletin.plus.ini
 /pboletin.spec
+/__pycache__
+/dist
