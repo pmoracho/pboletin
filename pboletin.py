@@ -230,9 +230,14 @@ class Config:
 		for e in ["linecolor_from" , "linecolor_to"]:
 			self.__dict__[e] = np.array(list(map(int,self.__dict__[e].split(','))))
 
+		# floatr
+		for e in ["line_rho"]:
+			self.__dict__[e] = float(self.__dict__[e])
+
 		# int
-		for e in ["resolution", "artifact_min_size","ignore_first_pages","ignore_last_pages",
-			"max_area", "min_area", "jpg_compression", "h_line_gap", "v_line_gap" ]:
+		for e in ["resolution", "artifact_min_size","ignore_first_pages", "ignore_last_pages",
+			"max_area", "min_area", "jpg_compression", "h_line_gap", "v_line_gap", "line_min_length",
+			"line_max_gap", "line_thres"]:
 			self.__dict__[e] = int(self.__dict__[e])
 
 		# booleano
@@ -284,22 +289,25 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	############################################################################
 	# Remuevo las líneas para recortar luego sin estas
 	############################################################################
-	clean_mask = cv.cvtColor(clean_mask, cv.COLOR_BGR2GRAY)
-	ret, clean_mask = cv.threshold(clean_mask, 10, 255, cv.THRESH_BINARY)
+	# clean_mask = cv.cvtColor(clean_mask, cv.COLOR_BGR2GRAY)
+	# ret, clean_mask = cv.threshold(clean_mask, 10, 255, cv.THRESH_BINARY)
 
-	height, width, channels = src.shape
-	blank_image = np.zeros((height,width,3), np.uint8)
-	blank_image = cv.bitwise_not(blank_image)
+	# height, width, channels = src.shape
+	# blank_image = np.zeros((height,width,3), np.uint8)
+	# blank_image = cv.bitwise_not(blank_image)
 
-	# get first masked value (foreground)
-	fg = cv.bitwise_or(blank_image, blank_image, mask=clean_mask)
-	bg = cv.bitwise_or(src, src, mask=cv.bitwise_not(clean_mask))
-	final = cv.bitwise_or(fg, bg)
+	# # get first masked value (foreground)
+	# fg = cv.bitwise_or(blank_image, blank_image, mask=clean_mask)
+	# bg = cv.bitwise_or(src, src, mask=cv.bitwise_not(clean_mask))
+	# final = cv.bitwise_or(fg, bg)
 	############################################################################
+	final = src
 
 	############################################################################
 	# Engroso la máscara para no perder lineas rectas
 	############################################################################
+	clean_mask = cv.cvtColor(clean_mask, cv.COLOR_BGR2GRAY)
+	ret, clean_mask = cv.threshold(clean_mask, 10, 255, cv.THRESH_BINARY)
 	kernel = np.ones((7,7),np.uint8)
 	clean_mask_gray = cv.dilate(clean_mask,kernel,iterations = 1)
 
@@ -308,10 +316,10 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	############################################################################
 	height, width, channels = final.shape
 	crop_mask = np.zeros((height,width,3), np.uint8)
-	minLineLength = 240*cfg.compensation
-	maxLineGap = 300*cfg.compensation
-	thres = int(100*cfg.compensation)
-	rho=0.5
+	minLineLength = int(cfg.line_min_length*cfg.compensation)
+	maxLineGap = int(cfg.line_max_gap*cfg.compensation)
+	thres = int(cfg.line_thres*cfg.compensation)
+	rho=cfg.line_rho
 	linesP = cv.HoughLinesP(clean_mask_gray,rho, np.pi/180,thres,minLineLength=minLineLength,maxLineGap=maxLineGap)
 	if linesP is not None:
 
@@ -325,10 +333,9 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 		cv.imwrite(os.path.join(workpath,'01.original.png'), src)
 		cv.imwrite(os.path.join(workpath,'02.mask_bw_negative.png'), mask_bw_negative)
 		cv.imwrite(os.path.join(workpath,'03.clean_mask.png'), clean_mask)
-		cv.imwrite(os.path.join(workpath,'04.original_sin_lineas.png'), final)
-		cv.imwrite(os.path.join(workpath,'05.clean_mask_gray.png'), clean_mask_gray)
-		cv.imwrite(os.path.join(workpath,'06.crop_mask.png'), crop_mask)
-		cv.imwrite(os.path.join(workpath,'07.original_con_lineas.png'), original_con_lineas)
+		cv.imwrite(os.path.join(workpath,'04.clean_mask_gray.png'), clean_mask_gray)
+		cv.imwrite(os.path.join(workpath,'05.crop_mask.png'), crop_mask)
+		cv.imwrite(os.path.join(workpath,'06.original_con_lineas.png'), original_con_lineas)
 
 	############################################################################
 	# En base a la mascara obtengo los rectangulos de interes
@@ -366,8 +373,14 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 
 	remove = cfg.remove_pixels if cfg.remove_pixels else [0,0,0,0]
 	contornos.sort(key=lambda x: x[4])
+
+	adj = 3 # Para que no entren las líneas rectas
 	for recorte in contornos[:-2]:
 		x,y,w,h,area = recorte
+		x=x+adj
+		y=y+adj
+		w=w-(adj*2)
+		h=h-(adj*2)
 		if area < max_area and area > min_area:
 
 			acta = get_acta(actas, (x,y,x+w,y+h), relation)
@@ -400,7 +413,7 @@ def get_main_area(img, acta):
 	lmin = list(map(min, zip(*l)))
 	lmax = list(map(max, zip(*l)))
 
-	add = 5
+	add = 3
 	seguridad = (
 		lmin[0]-add if lmin[0]-add > 0 else 0,
 		lmin[1]-add if lmin[1]-add > 0 else 0,
@@ -410,6 +423,7 @@ def get_main_area(img, acta):
 
 	x1 = seguridad[0] if seguridad[0]<remove[0] else remove[0]
 	y1 = seguridad[1] if seguridad[1]<remove[1] else remove[1]
+
 	x2 = seguridad[2] if seguridad[2]>width-remove[2] else width-remove[2]
 	y2 = seguridad[3] if seguridad[3]>height-remove[3] else height-remove[3]
 
@@ -446,6 +460,7 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
 			total_height += img.shape[0]
 
 		merged = np.zeros((total_height,max_width,3),dtype=np.uint8)
+		merged.fill(255)
 
 		current_y = 0 # keep track of where your current image was last placed in the y coordinate
 		for image in images:
