@@ -472,8 +472,9 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
 			f = os.path.join(outputpath, ext, '{0}.merged.{1}'.format(last_acta, ext))
 
 			if ext.lower() == 'pcx':
-				pil_im = Image.fromarray(merged)
-				pil_im.save(f)
+				# Mejorar esto por Dios
+				src = f.replace(ext, cfg.imgext[0])
+				Image.open(src).save(f)
 			else:
 				if unique_colors  <= 256:
 					merged = cv.cvtColor(merged, cv.COLOR_BGR2GRAY)
@@ -493,8 +494,9 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
 			f = os.path.join(opath,'{0}_crop_{1}.{2}'.format(boletin, index, ext))
 
 		if ext.lower() == 'pcx':
-			pil_im = Image.fromarray(crop)
-			pil_im.save(f)
+			# Mejorar esto por Dios
+			src = f.replace(ext, cfg.imgext[0])
+			Image.open(src).save(f)
 		else:
 			if unique_colors  <= 256:
 				crop  = cv.cvtColor(crop, cv.COLOR_BGR2GRAY)
@@ -658,10 +660,15 @@ def pdf_count_pages(filename):
 	Args:
 		filename(str): Path completo al archivo PDF
 	"""
+	loginfo("Get PDF info")
+	cmdline = '{0} {1}'.format(cfg.pdfinfo_bin,filename)
+	loginfo(cmdline)
+	process = subprocess.Popen(cmdline, stdout=subprocess.PIPE)
+	out, err = process.communicate()
 	rxcountpages = re.compile(cfg.rxcountpages, re.MULTILINE|re.DOTALL)
-	with open(filename,"rb") as f:
-		data = f.read()
-	return len(rxcountpages.findall(data.decode('latin1')))
+	m = re.findall(rxcountpages, out.decode('latin1'))
+
+	return int(m[0]) if m else None
 
 def get_metadata(html):
 	"""get_metadata: extrae información del boletin en el PDF
@@ -725,6 +732,8 @@ def process_pdf(pdf_file, force_page=None):
 	total_actas = 0
 	total_regions = 0
 	total_pages = pdf_count_pages(pdf_file)
+
+	loginfo("{0} has {1} pages".format(pdf_file, total_pages))
 
 	if not force_page:
 		if cfg.detect_export_pages:
