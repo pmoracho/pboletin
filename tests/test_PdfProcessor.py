@@ -16,12 +16,27 @@ from PdfProcessor import PdfProcessor
 class PdfProcessorTest(unittest.TestCase):
 
 	def test_pdf_count_pages(self):
-		"""Verifica la recuperación de la cantidad de páginas"""
+		"""Verifica la recuperacion de la cantidad de paginas"""
 
 		data = os.path.join(self._workpath,'data')
 		pdffile = os.path.join(data,'4670.pdf')
 		p = PdfProcessor(pdffile, self._cfg)
 		self.assertEqual(p.pdf_count_pages(), 76)
+
+	def test_process(self):
+		"""Verifica el proceso de un pdf"""
+
+		data = os.path.join(self._workpath,'data')
+		pdffile = os.path.join(data,'4670.pdf')
+		p = PdfProcessor(pdffile, self._cfg)
+
+		p.process(
+			startfun=lambda x:print(x),
+			statusfun=lambda x, y:print("{0} de {1}".format(x,y))
+				)
+
+		self.assertEqual(p.pdf_count_pages(), 76)
+
 
 	@classmethod
 	def setUpClass(cls):

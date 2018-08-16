@@ -5,3 +5,4 @@
 /pboletin.spec
 /__pycache__
 /dist
+/tests/__pycache__/*.pyc
