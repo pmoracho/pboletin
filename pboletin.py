@@ -32,7 +32,7 @@ __appname__		= "pboletin"
 __appdesc__		= "Procesamiento de boletines"
 __license__		= 'GPL v3'
 __copyright__	= "(c) 2018, %s" % (__author__)
-__version__		= "0.9"
+__version__		= "1.0"
 __date__		= "2018/06/02"
 
 
@@ -156,6 +156,13 @@ def init_argparse():
 								"dest": 	"loglevel",
 								"default":	"info",
 								"help":		_("Nivel de log")
+					},
+					"--input-path -i": {
+								"type": 	str,
+								"action": 	"store",
+								"dest": 	"inputpath",
+								"default":	None,
+								"help":		_("Carpeta dónde se alojan los boletines en pdf a procesa")
 					},
 					"--log-file -l": {
 								"type": 	str,
@@ -348,7 +355,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	# Cramos las subcarpetas para guardar las imagenes por extensión
 	############################################################################
 	for ext in cfg.imgext:
-		opath = os.path.join(outputpath, ext)
+		opath = os.path.join(outputpath, ext, "check")
 		os.makedirs(opath,exist_ok=True)
 
 	############################################################################
@@ -438,14 +445,17 @@ def get_main_area(img, acta):
 
 def save_crop(acta, crop, outputpath, boletin, index, last_acta):
 
-
 	unique_colors = len(np.unique(crop.reshape(-1, crop.shape[2]), axis=0))
 	compression = [int(cv.IMWRITE_JPEG_QUALITY), cfg.jpg_compression]
+	fmerged = None
 
 	if unique_colors <= 1:
 		return 0
 
 	if not acta and last_acta:
+		############################################################################################
+		# Es un Merged
+		############################################################################################
 		ext_compat = [e for e in cfg.imgext if e not in ['pcx']][0]
 
 		last_file = os.path.join(outputpath, ext_compat,'{0}.{1}'.format(last_acta, ext_compat))
@@ -467,31 +477,35 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
 			merged[current_y:image.shape[0]+current_y,:image.shape[1],:] = image
 			current_y += image.shape[0]
 
+		unique_colors = len(np.unique(merged.reshape(-1, merged.shape[2]), axis=0))
+
 		for ext in cfg.imgext:
 
-			f = os.path.join(outputpath, ext, '{0}.merged.{1}'.format(last_acta, ext))
+			# Muevo el file anterior a check
+			# shutil.move(last_file, os.path.join(outputpath, ext, 'check'))
+
+			fmerged = os.path.join(outputpath, ext, 'check', '{0}.merged.{1}'.format(last_acta, ext))
 
 			if ext.lower() == 'pcx':
 				# Mejorar esto por Dios
-				src = f.replace(ext, cfg.imgext[0])
-				Image.open(src).save(f)
+				src = fmerged.replace(ext, cfg.imgext[0])
+				Image.open(src).save(fmerged)
 			else:
 				if unique_colors  <= 256:
 					merged = cv.cvtColor(merged, cv.COLOR_BGR2GRAY)
 
 				if ext.lower() == 'jpg':
-					cv.imwrite(f, merged, compression)
-					add_resolution_to_jpg(f,cfg.resolution) 
+					cv.imwrite(fmerged, merged, compression)
+					add_resolution_to_jpg(fmerged,cfg.resolution) 
 				else:
-					cv.imwrite(f, merged, compression)
+					cv.imwrite(fmerged, merged, compression)
 
 	for ext in cfg.imgext:
 		opath = os.path.join(outputpath, ext)
-
 		if acta:
 			f = os.path.join(opath,'{0}.{1}'.format(acta, ext))
 		else:
-			f = os.path.join(opath,'{0}_crop_{1}.{2}'.format(boletin, index, ext))
+			f = os.path.join(opath,'check','{0}_crop_{1}.{2}'.format(boletin, index, ext))
 
 		if ext.lower() == 'pcx':
 			# Mejorar esto por Dios
@@ -506,6 +520,15 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
 				add_resolution_to_jpg(f,cfg.resolution) 
 			else:
 				cv.imwrite(f, crop, compression)
+
+	if fmerged:
+		for ext in cfg.imgext:
+			last_file = os.path.join(outputpath, ext,'{0}.{1}'.format(last_acta, ext))
+			# Muevo el file anterior a check
+			shutil.move(last_file, os.path.join(outputpath, ext, 'check'))
+			fmerged = os.path.join(outputpath, ext, 'check', '{0}.merged.{1}'.format(last_acta, ext))
+			shutil.move(fmerged,last_file)
+
 
 	return 1
 
@@ -670,7 +693,7 @@ def pdf_count_pages(filename):
 
 	return int(m[0]) if m else None
 
-def get_metadata(html):
+def get_metadata(cfg, html):
 	"""get_metadata: extrae información del boletin en el PDF
 
 	El boletin convertido de PDF -> HTML, se procesa con patrones
@@ -796,7 +819,7 @@ def process_pdf(pdf_file, force_page=None):
 		img_file = "pagina-{0}.png".format(str(p).zfill(maxz))
 		img_file = os.path.join(workpath, img_file)
 
-		actas = get_metadata(html)
+		actas = get_metadata(cfg,html)
 		loginfo("Actas encontradas: {0}".format(str(actas)))
 
 		if not cfg.detect_export_pages or (cfg.detect_export_pages and len(actas[2]) > 0) :
@@ -878,6 +901,9 @@ if __name__ == "__main__":
 
 		if args.debug_page:
 			cfg.save_process_files = True
+
+		if args.inputpath:
+			cfg.inputdir = args.inputpath
 
 		args.pdffile = os.path.join(cfg.inputdir, args.pdffile)
 		loginfo("Proces PDF : {0}".format(args.pdffile))
