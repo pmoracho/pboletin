@@ -78,6 +78,8 @@ class Config:
 			"line_max_gap", "line_thres"]:
 			self.__dict__[e] = int(self.__dict__[e])
 
+		self.imgext = [e.lower() for e in self.imgext]
+
 		# booleano
 		for e in ["save_process_files"]:
 			self.__dict__[e] = True if self.__dict__[e] == "True" else False

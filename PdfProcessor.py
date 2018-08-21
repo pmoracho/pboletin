@@ -66,8 +66,8 @@ except ImportError as err:
 
 class PdfProcessor():
 
-	def __init__(self, 	pdffile, 
-			  			config, 
+	def __init__(self, 	config,
+			  			pdffile=None, 
 			  			logging=None):
 
 		self._inputpdffile = pdffile
@@ -76,9 +76,11 @@ class PdfProcessor():
 		self._total_actas = 0
 		self._total_regions = 0
 		self._cfg = config
-		self._total_pages = self.pdf_count_pages()
 
-		self.loginfo("{0} has {1} pages".format(self._inputpdffile, self._total_pages))
+		if  self._inputpdffile:
+			self._total_pages = self.pdf_count_pages()
+			self.loginfo("{0} has {1} pages".format(self._inputpdffile, self._total_pages))
+
 
 	def loginfo(self,msg):
 
@@ -322,6 +324,8 @@ class PdfProcessor():
 		if metadata:
 			(x, y, actas) = metadata
 			relation = sum([height/y, width/x])/2
+		else:
+			actas = None
 
 		i = 1
 		contornos = []
@@ -344,12 +348,14 @@ class PdfProcessor():
 			h=h-(adj*2)
 			if area < max_area and area > min_area:
 
-				# acta = get_acta(actas, (x,y,x+w,y+h), relation)
+				acta = self.get_acta(actas, (x,y,x+w,y+h), relation) if actas else None
+				roi = final[y:y+h,x:x+w]
+				roi = self.get_main_area(roi, acta)
+				file = self.save_crop(acta, roi, outputpath, filename, i, last_acta)
+				if file:
+					self.duplicate_file(file)
+					i = i + 1
 
-				# roi = final[y:y+h,x:x+w]
-				# roi = get_main_area(roi, acta)
-				
-				# i = i + save_crop(acta, roi, outputpath, filename, i, last_acta)
 				pass
 			
 		return i-1
@@ -491,3 +497,244 @@ class PdfProcessor():
 
 		return newlist
 
+
+	def get_acta(self, actas, region, r):
+
+		rx1, ry1, rx2, ry2 = region
+		for x, y, numero in actas:
+			if x*r >= rx1 and x*r <= rx2 and y*r >= ry1 and y*r <= ry2:
+				return numero
+
+		return None
+
+
+	def get_main_area(self, img, acta):
+
+		remove = self._cfg.remove_pixels if self._cfg.remove_pixels else [0,0,0,0]
+
+		gray = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
+		ret,thresh = cv.threshold(gray,127,255,cv.THRESH_BINARY_INV)
+		kernel = np.ones((7,7),np.uint8)
+		gray = cv.dilate(thresh,kernel,iterations = 1)
+		im2, ctrs, hier = cv.findContours(gray.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+		l = [(t[0], t[1], t[0]+t[2], t[1]+t[3])  for t in [cv.boundingRect(ctr) for ctr in ctrs]]
+		height, width, channels = img.shape
+		
+		if not l:
+			# No hay zonas de interes posiblemente imagen en blanco
+			l = [(0,0,width,height)]
+
+		lmin = list(map(min, zip(*l)))
+		lmax = list(map(max, zip(*l)))
+
+		add = 3
+		seguridad = (
+			lmin[0]-add if lmin[0]-add > 0 else 0,
+			lmin[1]-add if lmin[1]-add > 0 else 0,
+			lmax[2]+add if lmax[2]+add < width else width,
+			lmax[3]+add if lmax[3]+add < height else height
+		)
+
+		x1 = seguridad[0] if seguridad[0]<remove[0] else remove[0]
+		y1 = seguridad[1] if seguridad[1]<remove[1] else remove[1]
+
+		x2 = seguridad[2] if seguridad[2]>width-remove[2] else width-remove[2]
+		y2 = seguridad[3] if seguridad[3]>height-remove[3] else height-remove[3]
+
+		crop = (x1, y1, x2, y2)
+
+		self.loginfo("Acta             : {0}".format(acta))
+		self.loginfo("Recorte seguridad: {0}".format(str(seguridad)))
+		self.loginfo("Recorte final    : {0}".format(str(crop)))
+		
+		roi = img[crop[1]:crop[1]+crop[3], crop[0]:crop[0]+crop[2]]
+		return roi
+
+	def save_crop(self, acta, crop, outputpath, boletin, index, last_acta):
+
+		unique_colors = len(np.unique(crop.reshape(-1, crop.shape[2]), axis=0))
+		compression = [int(cv.IMWRITE_JPEG_QUALITY), self._cfg.jpg_compression]
+		fmerged = None
+		ext_compat = 'jpg'
+
+		if unique_colors <= 1:
+			return None
+
+		if not acta and last_acta:
+			############################################################################################
+			# Es un Merge
+			############################################################################################
+			last_file = os.path.join(outputpath, ext_compat,'{0}.{1}'.format(last_acta, ext_compat))
+			last_img = cv.imread(last_file)			
+			max_width = 0 # find the max width of all the images
+			total_height = 0 # the total height of the images (vertical stacking)
+			images = [last_img, crop]
+			for img in images:
+				if img.shape[1] > max_width:
+					max_width = img.shape[1]
+				total_height += img.shape[0]
+
+			merged = np.zeros((total_height,max_width,3),dtype=np.uint8)
+			merged.fill(255)
+
+			current_y = 0 # keep track of where your current image was last placed in the y coordinate
+			for image in images:
+				merged[current_y:image.shape[0]+current_y,:image.shape[1],:] = image
+				current_y += image.shape[0]
+
+			unique_colors = len(np.unique(merged.reshape(-1, merged.shape[2]), axis=0))
+			fmerged = os.path.join(outputpath, ext_compat, 'check', '{0}.merged.{1}'.format(last_acta, ext_compat))
+
+			if unique_colors  <= 256:
+				merged = cv.cvtColor(merged, cv.COLOR_BGR2GRAY)
+
+			cv.imwrite(fmerged, merged, compression)
+			self.add_resolution_to_jpg(fmerged,self._cfg.resolution)
+
+			crop_file = os.path.join(outputpath, ext_compat,'{0}.{1}'.format(last_acta, ext_compat))
+			# Muevo el file anterior a check
+			shutil.move(crop_file, os.path.join(outputpath, ext_compat, 'check'))
+			fmerged = os.path.join(outputpath, ext_compat, 'check', '{0}.merged.{1}'.format(last_acta, ext_compat))
+			shutil.move(fmerged,crop_file)
+
+		else:
+
+			opath = os.path.join(outputpath, ext_compat)
+			if acta:
+				crop_file = os.path.join(opath,'{0}.{1}'.format(acta, ext_compat))
+			else:
+				crop_file = os.path.join(opath,'check','{0}_crop_{1}.{2}'.format(boletin, index, ext_compat))
+
+			if unique_colors  <= 256:
+				crop  = cv.cvtColor(crop, cv.COLOR_BGR2GRAY)
+
+			cv.imwrite(crop_file, crop, compression)
+
+		return crop_file
+
+
+	def duplicate_file(self, file):
+
+		for e in (e for e in self._cfg.imgext if e != 'jpg'):
+			output = file.replace('jpg', e)
+			Image.open(file).save(output)
+			
+		pass
+
+
+	def add_resolution_to_jpg(self, filename, resolution):
+		"""add_resolution_to_jpg: Agrega info de la resolución al archivo
+
+		Debido a problemas a la hora de incrustar imagenes en el Word resulta
+		necesario agregar al header del JPG la información de la resolución
+		Vertical y horizontal, debido a que opencv no salva esta información.
+
+		Args:
+			filename (str): Path completo al archivo jpg
+			resolution (int): Resolución
+
+		Example:
+			>>> add_resolution_to_jpg("c:\prueba.jpg", 150) # 150 dpi
+
+		"""
+		struct_fmt = '>6s5sHBHH'
+		struct_len = calcsize(struct_fmt)
+
+		with open(filename, "rb") as f:
+			header = unpack(struct_fmt, f.read(struct_len))
+			data = f.read()
+
+		with open(filename, "wb") as f:
+			f.write(pack(struct_fmt, header[0], header[1], header[2], header[3], resolution, resolution))
+			f.write(data)
+
+"""
+	def save_crop(self, acta, crop, outputpath, boletin, index, last_acta):
+
+		unique_colors = len(np.unique(crop.reshape(-1, crop.shape[2]), axis=0))
+		compression = [int(cv.IMWRITE_JPEG_QUALITY), cfg.jpg_compression]
+		fmerged = None
+
+		if unique_colors <= 1:
+			return 0
+
+		if not acta and last_acta:
+			############################################################################################
+			# Es un Merge
+			############################################################################################
+			ext_compat = [e for e in cfg.imgext if e not in ['pcx']][0]
+
+			last_file = os.path.join(outputpath, ext_compat,'{0}.{1}'.format(last_acta, ext_compat))
+			last_img = cv.imread(last_file)			
+
+			max_width = 0 # find the max width of all the images
+			total_height = 0 # the total height of the images (vertical stacking)
+			images = [last_img, crop]
+			for img in images:
+				if img.shape[1] > max_width:
+					max_width = img.shape[1]
+				total_height += img.shape[0]
+
+			merged = np.zeros((total_height,max_width,3),dtype=np.uint8)
+			merged.fill(255)
+
+			current_y = 0 # keep track of where your current image was last placed in the y coordinate
+			for image in images:
+				merged[current_y:image.shape[0]+current_y,:image.shape[1],:] = image
+				current_y += image.shape[0]
+
+			unique_colors = len(np.unique(merged.reshape(-1, merged.shape[2]), axis=0))
+
+			for ext in cfg.imgext:
+
+				# Muevo el file anterior a check
+				# shutil.move(last_file, os.path.join(outputpath, ext, 'check'))
+
+				fmerged = os.path.join(outputpath, ext, 'check', '{0}.merged.{1}'.format(last_acta, ext))
+
+				if ext.lower() == 'pcx':
+					# Mejorar esto por Dios
+					src = fmerged.replace(ext, cfg.imgext[0])
+					Image.open(src).save(fmerged)
+				else:
+					if unique_colors  <= 256:
+						merged = cv.cvtColor(merged, cv.COLOR_BGR2GRAY)
+
+					if ext.lower() == 'jpg':
+						cv.imwrite(fmerged, merged, compression)
+						add_resolution_to_jpg(fmerged,cfg.resolution) 
+					else:
+						cv.imwrite(fmerged, merged, compression)
+
+		for ext in cfg.imgext:
+			opath = os.path.join(outputpath, ext)
+			if acta:
+				f = os.path.join(opath,'{0}.{1}'.format(acta, ext))
+			else:
+				f = os.path.join(opath,'check','{0}_crop_{1}.{2}'.format(boletin, index, ext))
+
+			if ext.lower() == 'pcx':
+				# Mejorar esto por Dios
+				src = f.replace(ext, cfg.imgext[0])
+				Image.open(src).save(f)
+			else:
+				if unique_colors  <= 256:
+					crop  = cv.cvtColor(crop, cv.COLOR_BGR2GRAY)
+
+				if ext.lower() == 'jpg':
+					cv.imwrite(f, crop, compression)
+					add_resolution_to_jpg(f,cfg.resolution) 
+				else:
+					cv.imwrite(f, crop, compression)
+
+		if fmerged:
+			for ext in cfg.imgext:
+				last_file = os.path.join(outputpath, ext,'{0}.{1}'.format(last_acta, ext))
+				# Muevo el file anterior a check
+				shutil.move(last_file, os.path.join(outputpath, ext, 'check'))
+				fmerged = os.path.join(outputpath, ext, 'check', '{0}.merged.{1}'.format(last_acta, ext))
+				shutil.move(fmerged,last_file)
+
+
+		return 1
+"""
