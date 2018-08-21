@@ -57,6 +57,7 @@ try:
 	import statistics
 	from PIL import Image
 	from struct import *
+	from Config import Config
 
 except ImportError as err:
 	modulename = err.args[0].partition("'")[-1].rpartition("'")[0]
@@ -66,21 +67,43 @@ except ImportError as err:
 
 class PdfProcessor():
 
-	def __init__(self, 	config,
+	def __init__(self, 	configfile,
 			  			pdffile=None, 
-			  			logging=None):
+			  			logging=None,
+			  			debug_page=None):
 
 		self._inputpdffile = pdffile
 		self._logging = logging
 		self._lista_actas = []
 		self._total_actas = 0
 		self._total_regions = 0
-		self._cfg = config
+		self._force_page = debug_page if debug_page else None
 
-		if  self._inputpdffile:
+		try:
+			self._cfg = Config()
+			self.loginfo("Config file: {0}".format(configfile))
+			self._cfg.set_file(configfile)
+
+		except IOError as msg:
+			print("{0} not Found!".format(configfile))
+			sys.exit(-1)
+	
+		if self._cfg.inputdir:
+			self._inputpdffile = os.path.join(self._cfg.inputdir,self._inputpdffile)
+			
+		if self._inputpdffile:
+
+			from pathlib import Path
+			my_file = Path(self._inputpdffile)
+			if not my_file.is_file():
+				print("{0} not Found!".format(self._inputpdffile))
+				sys.exit(-1)
+
 			self._total_pages = self.pdf_count_pages()
 			self.loginfo("{0} has {1} pages".format(self._inputpdffile, self._total_pages))
 
+		if self._force_page:
+			self._cfg.save_process_files = True
 
 	def loginfo(self,msg):
 
@@ -96,19 +119,16 @@ class PdfProcessor():
 		out, err = process.communicate()
 		rxcountpages = re.compile(self._cfg.rxcountpages, re.MULTILINE|re.DOTALL)
 		m = re.findall(rxcountpages, out.decode('latin1'))
-
 		return int(m[0]) if m else None
 
-	def process(self,	startfun=None,
-			 			statusfun=None,
-			 			endfun=None,
-			 			force_page=None, 
-			  			from_page=None, 
-			  			to_page=None):
+	def process_pdf(self,	
+				 	startfun=None,
+					statusfun=None,
+			 		endfun=None,
+			  		from_page=None, 
+			  		to_page=None):
 
-		self._force_page = force_page
-
-		if not force_page:
+		if not self._force_page:
 			if self._cfg.detect_export_pages:
 				firstp = 1
 				endp = self._total_pages 
@@ -118,11 +138,12 @@ class PdfProcessor():
 
 			self._proc_pages = (endp - firstp) + 1
 		else:
-			firstp = force_page
-			endp = force_page
+			firstp = self._force_page
+			endp = self._force_page
 			self._proc_pages = 1
 
 		workpath = tempfile.mkdtemp()
+		self.loginfo("Config file: {0}".format(self._cfg.file))
 		self.loginfo("Create temp dir at: {0}".format(workpath))
 
 		filename, _ = os.path.splitext(os.path.basename(self._inputpdffile))
@@ -648,93 +669,3 @@ class PdfProcessor():
 			f.write(pack(struct_fmt, header[0], header[1], header[2], header[3], resolution, resolution))
 			f.write(data)
 
-"""
-	def save_crop(self, acta, crop, outputpath, boletin, index, last_acta):
-
-		unique_colors = len(np.unique(crop.reshape(-1, crop.shape[2]), axis=0))
-		compression = [int(cv.IMWRITE_JPEG_QUALITY), cfg.jpg_compression]
-		fmerged = None
-
-		if unique_colors <= 1:
-			return 0
-
-		if not acta and last_acta:
-			############################################################################################
-			# Es un Merge
-			############################################################################################
-			ext_compat = [e for e in cfg.imgext if e not in ['pcx']][0]
-
-			last_file = os.path.join(outputpath, ext_compat,'{0}.{1}'.format(last_acta, ext_compat))
-			last_img = cv.imread(last_file)			
-
-			max_width = 0 # find the max width of all the images
-			total_height = 0 # the total height of the images (vertical stacking)
-			images = [last_img, crop]
-			for img in images:
-				if img.shape[1] > max_width:
-					max_width = img.shape[1]
-				total_height += img.shape[0]
-
-			merged = np.zeros((total_height,max_width,3),dtype=np.uint8)
-			merged.fill(255)
-
-			current_y = 0 # keep track of where your current image was last placed in the y coordinate
-			for image in images:
-				merged[current_y:image.shape[0]+current_y,:image.shape[1],:] = image
-				current_y += image.shape[0]
-
-			unique_colors = len(np.unique(merged.reshape(-1, merged.shape[2]), axis=0))
-
-			for ext in cfg.imgext:
-
-				# Muevo el file anterior a check
-				# shutil.move(last_file, os.path.join(outputpath, ext, 'check'))
-
-				fmerged = os.path.join(outputpath, ext, 'check', '{0}.merged.{1}'.format(last_acta, ext))
-
-				if ext.lower() == 'pcx':
-					# Mejorar esto por Dios
-					src = fmerged.replace(ext, cfg.imgext[0])
-					Image.open(src).save(fmerged)
-				else:
-					if unique_colors  <= 256:
-						merged = cv.cvtColor(merged, cv.COLOR_BGR2GRAY)
-
-					if ext.lower() == 'jpg':
-						cv.imwrite(fmerged, merged, compression)
-						add_resolution_to_jpg(fmerged,cfg.resolution) 
-					else:
-						cv.imwrite(fmerged, merged, compression)
-
-		for ext in cfg.imgext:
-			opath = os.path.join(outputpath, ext)
-			if acta:
-				f = os.path.join(opath,'{0}.{1}'.format(acta, ext))
-			else:
-				f = os.path.join(opath,'check','{0}_crop_{1}.{2}'.format(boletin, index, ext))
-
-			if ext.lower() == 'pcx':
-				# Mejorar esto por Dios
-				src = f.replace(ext, cfg.imgext[0])
-				Image.open(src).save(f)
-			else:
-				if unique_colors  <= 256:
-					crop  = cv.cvtColor(crop, cv.COLOR_BGR2GRAY)
-
-				if ext.lower() == 'jpg':
-					cv.imwrite(f, crop, compression)
-					add_resolution_to_jpg(f,cfg.resolution) 
-				else:
-					cv.imwrite(f, crop, compression)
-
-		if fmerged:
-			for ext in cfg.imgext:
-				last_file = os.path.join(outputpath, ext,'{0}.{1}'.format(last_acta, ext))
-				# Muevo el file anterior a check
-				shutil.move(last_file, os.path.join(outputpath, ext, 'check'))
-				fmerged = os.path.join(outputpath, ext, 'check', '{0}.merged.{1}'.format(last_acta, ext))
-				shutil.move(fmerged,last_file)
-
-
-		return 1
-"""

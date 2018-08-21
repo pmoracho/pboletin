@@ -36,7 +36,7 @@ class PdfProcessorTest(unittest.TestCase):
 		for pdffile in files:
 
 			p = PdfProcessor(self._cfg, pdffile)
-			p.process(
+			p.process_pdf(
 				startfun=lambda x:print("Total de paginas: {0}".format(x)),
 				statusfun=lambda x, y:print("Procesando pagina {0} de {1}".format(x,y))
 			)

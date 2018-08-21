@@ -88,6 +88,8 @@ try:
 	import statistics
 	from PIL import Image
 	from struct import *
+	from PdfProcessor import PdfProcessor
+	from Config import Config
 
 except ImportError as err:
 	modulename = err.args[0].partition("'")[-1].rpartition("'")[0]
@@ -233,41 +235,30 @@ if __name__ == "__main__":
 			log_level = getattr(logging, args.loglevel.upper(), None)
 			logging.basicConfig(filename=args.logfile, level=log_level, format='%(asctime)s|%(levelname)s|%(message)s', datefmt='%Y/%m/%d %I:%M:%S', filemode='w')	
 
-		try:
-			loginfo("Config file: {0}".format(configfile))
-			cfg.set_file(configfile)
-		except IOError as msg:
-			cmdparser.error(str(msg))
-			sys.exit(-1)
+		p = PdfProcessor(
+					configfile=configfile,
+				   	pdffile=args.pdffile,
+				   	logging=logging,
+				   	debug_page=args.debug_page
+		)	
 
-		if args.debug_page:
-			cfg.save_process_files = True
+		bar = None
 
-		if args.inputpath:
-			cfg.inputdir = args.inputpath
-
-		args.pdffile = os.path.join(cfg.inputdir, args.pdffile)
-		loginfo("Proces PDF : {0}".format(args.pdffile))
-
-	def __init__(self, 	config,
-			  			pdffile=None, 
-			  			logging=None):
-
-		p = PdfProcessor( config=cfg,
-				   		  pdffile=args.pdffile,
-				   		  logging=logging)	
-
-		def statusbar_start=(num_bars):
+		def statusbar_start(num_bars):
+			global bar
 			widgets = [FormatLabel(''), ' ', Percentage(), ' ', Bar('#'), ' ', ETA(), ' ', RotatingMarker()]
 			bar = ProgressBar(widgets=widgets, maxval=num_bars)
+			pass
 
-		def statusbar_update(i):
+		def statusbar_update(i,p):
+			global bar
 			bar.update(i)
 
 		def statusbar_end():
+			global bar
 			bar.finish()
 	
-		p.process(
+		p.process_pdf(
 			startfun=statusbar_start,
 			statusfun=statusbar_update,
 			endfun=statusbar_end
