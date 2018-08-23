@@ -74,9 +74,10 @@ class PdfProcessor():
 
 		self._inputpdffile = pdffile
 		self._logging = logging
-		self._lista_actas = []
-		self._total_actas = 0
-		self._total_regions = 0
+		self.lista_actas = []
+		self.total_actas = 0
+		self.total_regions = 0
+		self.actas_error = []
 		self._force_page = debug_page if debug_page else None
 
 		try:
@@ -142,9 +143,9 @@ class PdfProcessor():
 			endp = self._force_page
 			self._proc_pages = 1
 
-		workpath = tempfile.mkdtemp()
+		self.workpath = tempfile.mkdtemp()
 		self.loginfo("Config file: {0}".format(self._cfg.file))
-		self.loginfo("Create temp dir at: {0}".format(workpath))
+		self.loginfo("Create temp dir at: {0}".format(self.workpath))
 
 		filename, _ = os.path.splitext(os.path.basename(self._inputpdffile))
 		outputpath = os.path.join(self._cfg.outputdir,filename)
@@ -174,7 +175,7 @@ class PdfProcessor():
 			cmdline = '{0} -png -f {3} -l {4} -r {5} {1} {2}/pagina'.format(
 				self._cfg.pdftoppm_bin,
 				self._inputpdffile,
-				workpath,
+				self.workpath,
 				p,
 				p,
 				self._cfg.resolution
@@ -189,7 +190,7 @@ class PdfProcessor():
 			cmdline = '{0} -q -c -f {3} -l {4} {1} {2}/pagina'.format(
 				self._cfg.pdftohtml_bin,
 				self._inputpdffile,
-				workpath,
+				self.workpath,
 				p,
 				p
 			)
@@ -200,21 +201,21 @@ class PdfProcessor():
 			##############################################################################
 			# Lectura del contenido html
 			##############################################################################
-			with open(os.path.join(workpath,'pagina-{0}.html'.format(str(p))), 'r', encoding="Latin1") as f:
+			with open(os.path.join(self.workpath,'pagina-{0}.html'.format(str(p))), 'r', encoding="Latin1") as f:
 				html = f.read()
 
 			img_file = "pagina-{0}.png".format(str(p).zfill(maxz))
-			img_file = os.path.join(workpath, img_file)
+			img_file = os.path.join(self.workpath, img_file)
 
 			actas = self.get_metadata(html)
 			self.loginfo("Actas encontradas: {0}".format(str(actas)))
 
 			if not self._cfg.detect_export_pages or (self._cfg.detect_export_pages and len(actas[2]) > 0) :
 
-				last_acta = self._lista_actas[-1] if self._lista_actas else None
-				self._lista_actas.extend([a[2] for a in actas[2]])
-				self._total_actas = self._total_actas + (len(actas[2]) if actas is not None else 0)
-				self._total_regions = self._total_regions + self.crop_regions(img_file, workpath, outputpath, last_acta=last_acta, metadata=actas)
+				last_acta = self.lista_actas[-1] if self.lista_actas else None
+				self.lista_actas.extend([a[2] for a in actas[2]])
+				self.total_actas = self.total_actas + (len(actas[2]) if actas is not None else 0)
+				self.total_regions = self.total_regions + self.crop_regions(img_file, self.workpath, outputpath, last_acta=last_acta, metadata=actas)
 
 			if statusfun:
 				statusfun(i, self._proc_pages)
@@ -222,8 +223,18 @@ class PdfProcessor():
 			i = i + 1
 
 		self.loginfo("Remove temp dir")
+      	if not self._force_page:
+        	shutil.rmtree(self.workpath)
+		
 		if endfun:
 			endfun()
+
+		# Verificamos actas que no existierab como archivos
+		for a in self.lista_actas:
+			f = os.path.join(outputpath,self._cfg.imgext[0],'{0}.{1}'.format(a,self._cfg.imgext[0]))
+			if not os.path.isfile(f):
+				self.actas_error.append(a)
+
 
 	def get_metadata(self, html):
 		"""get_metadata: extrae información del boletin en el PDF

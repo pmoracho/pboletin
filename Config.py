@@ -85,3 +85,15 @@ class Config:
 			self.__dict__[e] = True if self.__dict__[e] == "True" else False
 
 		self.compensation = self.resolution/300
+
+	def __str__(self):
+			
+			parametros = (
+				"line_min_length              : {0}".format(int(self.line_min_length*self.compensation)),
+				"line_max_gap                 : {0}".format(int(self.line_max_gap*self.compensation)),
+				"line_thres                   : {0}".format(int(self.line_thres*self.compensation)),
+				"line_rho                     : {0}".format(self.line_rho),
+				"resolution                   : {0}".format(self.resolution)
+				)
+
+			return "\n".join(parametros)

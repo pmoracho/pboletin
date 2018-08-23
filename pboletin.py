@@ -264,5 +264,21 @@ if __name__ == "__main__":
 			endfun=statusbar_end
 		)
 
+		print("")
+	    print("-- Estatus -------------------------------------------")
+      	if args.debug_page:
+        	print("Carpeta temporal de trabajo  : {0}".format(p.workpath))
+
+		print("Total de actas               : {0}".format(p.total_actas))
+		print("Total de regiones recortadas : {0}".format(p.total_regions))
+		if p.actas_error:
+			print("Actas no encontradas         : {0}".format(",".join(p.actas_error)))
+
+		if force_page:
+			print("Actas encontradas            : {0}".format(",".join(p.lista_actas)))
+			print("-- Configuración -------------------------------------")
+			print(p._cfg)
+
+
 	else:
 		cmdparser.print_help()
