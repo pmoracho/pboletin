@@ -311,7 +311,7 @@ class PdfProcessor():
 		maxLineGap = int(self._cfg.line_max_gap*self._cfg.compensation)
 		thres = int(self._cfg.line_thres*self._cfg.compensation)
 		rho=self._cfg.line_rho
-		linesP = cv.HoughLinesP(clean_mask_gray,rho, np.pi/180,thres,minLineLength=minLineLength,maxLineGap=maxLineGap)
+		linesP = cv.HoughLinesP(clean_mask_gray,rho, np.pi/500,thres,minLineLength=minLineLength,maxLineGap=maxLineGap)
 		if linesP is not None:
 
 			ll = [e[0] for e in np.array(linesP).tolist()]
@@ -389,8 +389,8 @@ class PdfProcessor():
 		xs = list(chain(*[(l[0], l[2]) for l in horizontales]))
 		ys = list(chain(*[(l[1], l[3]) for l in horizontales]))
 
-		min_x = min(xs) - 20
-		max_x = max(xs) + 20
+		min_x = min(xs) - 10
+		max_x = max(xs) + 10
 		min_y = min(ys)
 		max_y = max(ys)
 
