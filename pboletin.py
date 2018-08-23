@@ -252,6 +252,19 @@ class Config:
 			self.__dict__[e] = True if self.__dict__[e] == "True" else False
 
 		self.compensation = self.resolution/300
+	
+	def __str__(self):
+		
+		parametros = (
+			"line_min_length              : {0}".format(int(self.line_min_length*self.compensation)),
+			"line_max_gap                 : {0}".format(int(self.line_max_gap*self.compensation)),
+			"line_thres                   : {0}".format(int(self.line_thres*self.compensation)),
+			"line_rho                     : {0}".format(self.line_rho),
+			"resolution                   : {0}".format(self.resolution)
+			)
+
+		return "\n".join(parametros)
+	
 
 cfg = Config()
 
@@ -291,23 +304,9 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 			clean_mask[output == i + 1] = 255
 	############################################################################
 
+	# original_con_lineas_raw = np.copy(src)
 	original_con_lineas = np.copy(src)
 
-	############################################################################
-	# Remuevo las líneas para recortar luego sin estas
-	############################################################################
-	# clean_mask = cv.cvtColor(clean_mask, cv.COLOR_BGR2GRAY)
-	# ret, clean_mask = cv.threshold(clean_mask, 10, 255, cv.THRESH_BINARY)
-
-	# height, width, channels = src.shape
-	# blank_image = np.zeros((height,width,3), np.uint8)
-	# blank_image = cv.bitwise_not(blank_image)
-
-	# # get first masked value (foreground)
-	# fg = cv.bitwise_or(blank_image, blank_image, mask=clean_mask)
-	# bg = cv.bitwise_or(src, src, mask=cv.bitwise_not(clean_mask))
-	# final = cv.bitwise_or(fg, bg)
-	############################################################################
 	final = src
 
 	############################################################################
@@ -327,14 +326,18 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	maxLineGap = int(cfg.line_max_gap*cfg.compensation)
 	thres = int(cfg.line_thres*cfg.compensation)
 	rho=cfg.line_rho
-	linesP = cv.HoughLinesP(clean_mask_gray,rho, np.pi/180,thres,minLineLength=minLineLength,maxLineGap=maxLineGap)
+	linesP = cv.HoughLinesP(clean_mask_gray,rho, np.pi/500,thres,minLineLength=minLineLength,maxLineGap=maxLineGap)
 	if linesP is not None:
 
-		ll = [e[0] for e in np.array(linesP).tolist()]
-		ll = process_lines(ll,cfg.resolution)
+		llorig = [e[0] for e in np.array(linesP).tolist()]
+		ll = process_lines(llorig,cfg.resolution)
 		for l in [e[1] for e in enumerate(ll)]:
 			cv.line(original_con_lineas, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
 			cv.line(crop_mask, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
+
+		# for l in [e[1] for e in enumerate(llorig)]:
+		# 	cv.line(original_con_lineas_raw, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
+
 
 	if cfg.save_process_files:
 		cv.imwrite(os.path.join(workpath,'01.original.png'), src)
@@ -343,6 +346,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 		cv.imwrite(os.path.join(workpath,'04.clean_mask_gray.png'), clean_mask_gray)
 		cv.imwrite(os.path.join(workpath,'05.crop_mask.png'), crop_mask)
 		cv.imwrite(os.path.join(workpath,'06.original_con_lineas.png'), original_con_lineas)
+		# cv.imwrite(os.path.join(workpath,'07.original_con_lineas_raw.png'), original_con_lineas_raw)
 
 	############################################################################
 	# En base a la mascara obtengo los rectangulos de interes
@@ -549,8 +553,8 @@ def process_lines(lista, in_res):
 	xs = list(chain(*[(l[0], l[2]) for l in horizontales]))
 	ys = list(chain(*[(l[1], l[3]) for l in horizontales]))
 
-	min_x = min(xs) - 20
-	max_x = max(xs) + 20
+	min_x = min(xs) - 10
+	max_x = max(xs) + 10
 	min_y = min(ys)
 	max_y = max(ys)
 
@@ -839,8 +843,10 @@ def process_pdf(pdf_file, force_page=None):
 	loginfo("Remove temp dir")
 
 	bar.finish()
+	print("")
+	print("-- Estatus -------------------------------------------")
 	if args.debug_page:
-		print(workpath)
+		print("Carpeta temporal de trabajo  : {0}".format(workpath))
 	else:
 		shutil.rmtree(workpath)
 
@@ -857,6 +863,8 @@ def process_pdf(pdf_file, force_page=None):
 
 	if force_page:
 		print("Actas encontradas            : {0}".format(",".join(lista_actas)))
+		print("-- Configuración -------------------------------------")
+		print(cfg)
 
 	loginfo("Finish process")
 
