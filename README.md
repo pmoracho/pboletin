@@ -19,9 +19,12 @@ alojaremos este proyecto, por ejemplo `c:\proyectos`, simplemente:
 ``` 
 c:\> c: 
 c:\> cd \Proyectos 
-c:\> git clone https://github.com/pmoracho/pboletin.git
+c:\> git clone <url del repositorio>
 c:\> cd \pboletin.git
 ``` 
+
+[Proyecto](./)
+
 
 ## Instalación de **Python**
 
