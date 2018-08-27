@@ -1,16 +1,21 @@
+@echo off
+
 REM --------------------------------------------------------
 REM Bat para la generación del paquete de deploy de pboletin
 REM --------------------------------------------------------
 
-@echo off
 
 REM --------------------------------------------------------
 REM Creación del paquete para distribuir
 REM --------------------------------------------------------
+@echo --------------------------------------------------------
 @echo Generando distribucion con pyinstaller..
+@echo --------------------------------------------------------
 @pyinstaller pboletin.py --onedir --noupx --clean --noconfirm
 
+@echo --------------------------------------------------------
 @echo Copiando archivos y herramientas adicionales..
+@echo --------------------------------------------------------
 
 REM --------------------------------------------------------
 REM Ini de la applicación
@@ -27,8 +32,12 @@ REM --------------------------------------------------------
 REM --------------------------------------------------------
 REM Eliminar archivos de trabajo
 REM --------------------------------------------------------
+@echo --------------------------------------------------------
 @echo Eliminando archivos de trabajo ..
-@del build /S /F /Q
+@echo --------------------------------------------------------
+@rmdir build /S /Q
 @del *.spec /S /F /Q
 
+@echo --------------------------------------------------------
 @echo Carpeta a distribuir dist\pboletin..
+@echo --------------------------------------------------------
