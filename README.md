@@ -1,19 +1,33 @@
-<M-F9>
 # pboletin - Procesamiento de boletines del INPI
 
-Herramienta para recorte automático de las marcas publicadas por el INPI
-
-
 **pboletin** es una herramienta que procesa los boletines de marcas del INPI,
-generando recortes de imagenes asociadas a cada acta. Básicamente se leen todas
+generando recortes de imágenes asociadas a cada acta. Básicamente se leen todas
 las páginas de un Boletín en PDF y se generan recortes gráficos en varios
 formatos para cada número de acta del boletín.
 
 
 # Empecemos
 
+Antes que nada, necesitaremos:
 
-## Instalación de Python
+* [Git for Windows](https://git-scm.com/download/win) instalado y funcionando
+* Una terminal de Windows, puede ser `cmd.exe`
+
+Con **Git** instalado, desde la línea de comando y con una carpeta dónde
+alojaremos este proyecto, por ejemplo `c:\proyectos`, simplemente:
+
+``` 
+c: 
+cd Proyectos 
+git clone https://github.com/PlusSistemas/Plus-Boletines.git 
+cd pboletin 
+``` 
+
+**Nota:** Tener en cuenta: El repositorio es `Plus-Boletines.git` y la raíz de nuestro
+proyecto es `Plus-Boletines.git/pboletin`
+
+
+## Instalación de **Python**
 
 Para desarrollo de la herramienta es necesario, en primer término, descargar un
 interprete Python. **pboletin** ha sido desarrollado con la versión 3.5, no es
@@ -27,7 +41,7 @@ con cualquier versión de la rama 3x.
 * [Python 3.5 (64 bits)](https://www.python.org/ftp/python/3.5.4/python-3.5.4rc1-amd64.exe)
 
 Se descarga y se instala en el sistema el interprete **Python** deseado. A
-partir de ahora trabajaremos en una terminal de windows (`cmd.exe`). Para
+partir de ahora trabajaremos en una terminal de Windows (`cmd.exe`). Para
 verificar la correcta instalación, en particular que el interprete este en el `PATH`
 del sistemas, simplemente corremos `python --version`, la salida deberá
 coincidir con la versión instalada 
@@ -37,29 +51,29 @@ Es conveniente pero no mandatorio hacer upgrade de la herramienta pip: `python
 
 ## Instalación de `Virtualenv`
 
-[Virutalenv](https://virtualenv.pypa.io/en/stable/). Es la herramienta
-estándar para crear entornos "aislados" de **Python**. En nuestro ejemplo
-**pboletin**, requiere de Ptython 3.5 y de varios "paquetes" adcionales de
-versiones específicas. Para no tener conflictos de desarrollo lo que haremos
-mediante esta herramienta es crear un "entorno virtual" en una
-carpeta del projecto (que llamaremos `venv`), dónde una vez "activado" dicho entorno podremos
-instalarle los paquetes que requiere el proyecto. Este "entorno virtual"
-contendrá una copia completa de **Python** y los paquetes mencionados, al
-activarlo se modifica el `PATH` a `python.exe` que ahora apuntará a nuestra
-carpeta del entorno y nuestras propias librerí, evitando cualquier tipo de
-conflicto con un entorno **Python** ya existente. La instalación de `virtualenv` se
-hara mediante 
+[Virutalenv](https://virtualenv.pypa.io/en/stable/). Es la herramienta estándar
+para crear entornos "aislados" de **Python**. En nuestro ejemplo **pboletin**,
+requiere de Python 3x y de varios "paquetes" adicionales de versiones
+específicas. Para no tener conflictos de desarrollo lo que haremos mediante
+esta herramienta es crear un "entorno virtual" en una carpeta del proyecto (que
+llamaremos `venv`), dónde una vez "activado" dicho entorno podremos instalarle
+los paquetes que requiere el proyecto. Este "entorno virtual" contendrá una
+copia completa de **Python** y los paquetes mencionados, al activarlo se
+modifica el `PATH` al `python.exe` que ahora apuntará a nuestra carpeta del
+entorno y nuestras propias librerías, evitando cualquier tipo de conflicto con un
+entorno **Python** ya existente. La instalación de `virtualenv` se hará
+mediante:
 
 ```
 pip install virtualenv
 ```
 
-* Creación y activación del entorno virtual
+## Creación y activación del entorno virtual
 
 
-* Instalación de requrimientos
+## Instalación de requrimientos
 
-* Desarrollo
+## Desarrollo
 
-* Generación del paquete para deploy
+## Generación del paquete para deploy
 
