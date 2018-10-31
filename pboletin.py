@@ -279,6 +279,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	############################################################################
 	# Lectura inicial de la imagen
 	############################################################################
+	loginfo("Abriendo archivo: {0}".format(filepath))
 	src = cv.imread(filepath)
 	if src is None:
 		print ('Error opening {0}!'.format(filepath))
@@ -289,11 +290,13 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	############################################################################
 	# Me quedo solo con el color de las lineas rectas y el texto b y n (negativo)
 	############################################################################
+	loginfo("Mask image")
 	mask_bw_negative = cv.inRange(src, cfg.linecolor_from, cfg.linecolor_to)
 
 	############################################################################
 	# Quito artefactos de hasta una cierta superficie
 	############################################################################
+	loginfo("Remove artifacts")
 	nb_components, output, stats, centroids = cv.connectedComponentsWithStats(mask_bw_negative, connectivity=8)
 	sizes = stats[1:, -1]
 	nb_components = nb_components - 1
@@ -305,6 +308,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	############################################################################
 
 	# original_con_lineas_raw = np.copy(src)
+	loginfo("Copy original")
 	original_con_lineas = np.copy(src)
 
 	final = src
@@ -312,6 +316,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	############################################################################
 	# Engroso la máscara para no perder lineas rectas
 	############################################################################
+	loginfo("Dilate")
 	clean_mask = cv.cvtColor(clean_mask, cv.COLOR_BGR2GRAY)
 	ret, clean_mask = cv.threshold(clean_mask, 10, 255, cv.THRESH_BINARY)
 	kernel = np.ones((7,7),np.uint8)
@@ -326,7 +331,11 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	maxLineGap = int(cfg.line_max_gap*cfg.compensation)
 	thres = int(cfg.line_thres*cfg.compensation)
 	rho=cfg.line_rho
-	linesP = cv.HoughLinesP(clean_mask_gray,rho, np.pi/500,thres,minLineLength=minLineLength,maxLineGap=maxLineGap)
+	loginfo("Lines detection: rho {1} np.pi/500: {2} thres {3} minLineLength {4}, maxLineGap {5}".format(clean_mask_gray, rho, np.pi/500, thres, minLineLength, maxLineGap))
+
+	linesP = None
+	linesP = cv.HoughLinesP(clean_mask_gray, rho, np.pi/500, thres, minLineLength=minLineLength, maxLineGap=maxLineGap)
+	
 	if linesP is not None:
 
 		llorig = [e[0] for e in np.array(linesP).tolist()]
@@ -335,74 +344,66 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 			cv.line(original_con_lineas, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
 			cv.line(crop_mask, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
 
-		# for l in [e[1] for e in enumerate(llorig)]:
-		# 	cv.line(original_con_lineas_raw, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
+		if cfg.save_process_files:
+			loginfo("Saving temp files")
+			cv.imwrite(os.path.join(workpath,'01.original.png'), src)
+			cv.imwrite(os.path.join(workpath,'02.mask_bw_negative.png'), mask_bw_negative)
+			cv.imwrite(os.path.join(workpath,'03.clean_mask.png'), clean_mask)
+			cv.imwrite(os.path.join(workpath,'04.clean_mask_gray.png'), clean_mask_gray)
+			cv.imwrite(os.path.join(workpath,'05.crop_mask.png'), crop_mask)
+			cv.imwrite(os.path.join(workpath,'06.original_con_lineas.png'), original_con_lineas)
+			# cv.imwrite(os.path.join(workpath,'07.original_con_lineas_raw.png'), original_con_lineas_raw)
 
+		############################################################################
+		# En base a la mascara obtengo los rectangulos de interes
+		############################################################################
+		loginfo("Contours")
+		gray = cv.cvtColor(crop_mask, cv.COLOR_BGR2GRAY) # convert to grayscale
+		retval, thresh_gray = cv.threshold(gray, thresh=1, maxval=255, type=cv.THRESH_BINARY_INV)
+		image, contours, hierarchy = cv.findContours(thresh_gray,cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE )
 
-	if cfg.save_process_files:
-		cv.imwrite(os.path.join(workpath,'01.original.png'), src)
-		cv.imwrite(os.path.join(workpath,'02.mask_bw_negative.png'), mask_bw_negative)
-		cv.imwrite(os.path.join(workpath,'03.clean_mask.png'), clean_mask)
-		cv.imwrite(os.path.join(workpath,'04.clean_mask_gray.png'), clean_mask_gray)
-		cv.imwrite(os.path.join(workpath,'05.crop_mask.png'), crop_mask)
-		cv.imwrite(os.path.join(workpath,'06.original_con_lineas.png'), original_con_lineas)
-		# cv.imwrite(os.path.join(workpath,'07.original_con_lineas_raw.png'), original_con_lineas_raw)
+		############################################################################
+		# Recorto los rectangulos
+		# Si las coordenadas de algun acta entran dentro de la zona de recorte
+		# Bien! podemos asociar la zona con el número de acta
+		############################################################################
+		max_area = cfg.max_area * cfg.compensation
+		min_area = cfg.min_area * cfg.compensation
+		if metadata:
+			(x, y, actas) = metadata
+			relation = sum([height/y, width/x])/2
 
-	############################################################################
-	# En base a la mascara obtengo los rectangulos de interes
-	############################################################################
-	gray = cv.cvtColor(crop_mask, cv.COLOR_BGR2GRAY) # convert to grayscale
-	retval, thresh_gray = cv.threshold(gray, thresh=1, maxval=255, type=cv.THRESH_BINARY_INV)
-	image, contours, hierarchy = cv.findContours(thresh_gray,cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE )
+		i = 1
+		contornos = []
+		for cont in contours:
+			x,y,w,h = cv.boundingRect(cont)
+			area = w*h
+			contornos.append((x,y,w,h,area))
 
-	############################################################################
-	# Cramos las subcarpetas para guardar las imagenes por extensión
-	############################################################################
-	for ext in cfg.imgext:
-		opath = os.path.join(outputpath, ext, "check")
-		os.makedirs(opath,exist_ok=True)
+		final = final.astype(np.uint8)
 
-	############################################################################
-	# Recorto los rectangulos
-	# Si las coordenadas de algun acta entran dentro de la zona de recorte
-	# Bien! podemos asociar la zona con el número de acta
-	############################################################################
-	max_area = cfg.max_area * cfg.compensation
-	min_area = cfg.min_area * cfg.compensation
-	if metadata:
-		(x, y, actas) = metadata
-		relation = sum([height/y, width/x])/2
+		remove = cfg.remove_pixels if cfg.remove_pixels else [0,0,0,0]
+		contornos.sort(key=lambda x: x[4])
 
-	i = 1
-	contornos = []
-	for cont in contours:
-		x,y,w,h = cv.boundingRect(cont)
-		area = w*h
-		contornos.append((x,y,w,h,area))
+		adj = 3 # Para que no entren las líneas rectas
+		for recorte in contornos[:-2]:
+			x,y,w,h,area = recorte
+			x=x+adj
+			y=y+adj
+			w=w-(adj*2)
+			h=h-(adj*2)
+			if area < max_area and area > min_area:
 
-	final = final.astype(np.uint8)
+				acta = get_acta(actas, (x,y,x+w,y+h), relation)
 
-	remove = cfg.remove_pixels if cfg.remove_pixels else [0,0,0,0]
-	contornos.sort(key=lambda x: x[4])
+				roi = final[y:y+h,x:x+w]
+				roi = get_main_area(roi, acta)
+				
+				i = i + save_crop(acta, roi, outputpath, filename, i, last_acta)
 
-	adj = 3 # Para que no entren las líneas rectas
-	for recorte in contornos[:-2]:
-		x,y,w,h,area = recorte
-		x=x+adj
-		y=y+adj
-		w=w-(adj*2)
-		h=h-(adj*2)
-		if area < max_area and area > min_area:
-
-			acta = get_acta(actas, (x,y,x+w,y+h), relation)
-
-			roi = final[y:y+h,x:x+w]
-			roi = get_main_area(roi, acta)
-			
-			i = i + save_crop(acta, roi, outputpath, filename, i, last_acta)
-
-	return i-1
-
+		return i-1
+	
+	return 0
 
 def get_main_area(img, acta):
 
@@ -791,6 +792,13 @@ def process_pdf(pdf_file, force_page=None):
 	maxz = len(str(total_pages))
 	i=1
 
+	############################################################################
+	# Creamos las subcarpetas para guardar las imagenes por extensión
+	############################################################################
+	for ext in cfg.imgext:
+		opath = os.path.join(outputpath, ext, "check")
+		os.makedirs(opath,exist_ok=True)
+
 	for p in range(firstp,endp+1):
 
 		loginfo("Extract page {0} of {1}".format(i,num_bars))
@@ -833,7 +841,11 @@ def process_pdf(pdf_file, force_page=None):
 			lista_actas.extend([a[2] for a in actas[2]])
 			total_actas = total_actas + (len(actas[2]) if actas is not None else 0)
 
-			total_regions = total_regions + crop_regions(img_file, workpath, outputpath, last_acta=last_acta, metadata=actas)
+			try:
+				total_regions = total_regions + crop_regions(img_file, workpath, outputpath, last_acta=last_acta, metadata=actas)
+			except Exception as msg:
+				print(str(msg))
+				sys.exit(-1)
 
 			widgets[0] = FormatLabel('[Página {0} de {1}]'.format(i,num_bars))
 
