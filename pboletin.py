@@ -205,6 +205,9 @@ def init_argparse():
 def loginfo(msg):
 	logging.info(msg.replace("|", " "))
 
+def logerror(msg):
+	msg = "Error: " + msg.replace("|", " ")
+	logging.info(msg)
 
 class Config:
 
@@ -282,7 +285,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	loginfo("Abriendo archivo: {0}".format(filepath))
 	src = cv.imread(filepath)
 	if src is None:
-		print ('Error opening {0}!'.format(filepath))
+		logerror('opening {0}!'.format(filepath))
 		return -1
 
 	height, width, channels = src.shape
@@ -373,7 +376,6 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 			(x, y, actas) = metadata
 			relation = sum([height/y, width/x])/2
 
-		i = 1
 		contornos = []
 		for cont in contours:
 			x,y,w,h = cv.boundingRect(cont)
@@ -385,6 +387,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 		remove = cfg.remove_pixels if cfg.remove_pixels else [0,0,0,0]
 		contornos.sort(key=lambda x: x[4])
 
+		i = 1
 		adj = 3 # Para que no entren las líneas rectas
 		for recorte in contornos[:-2]:
 			x,y,w,h,area = recorte
@@ -395,12 +398,15 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 			if area < max_area and area > min_area:
 
 				acta = get_acta(actas, (x,y,x+w,y+h), relation)
+				loginfo("Acta ubicada por posicion: {0}".format(acta))
 
 				roi = final[y:y+h,x:x+w]
 				roi = get_main_area(roi, acta)
 				
-				i = i + save_crop(acta, roi, outputpath, filename, i, last_acta)
+				save_crop(acta, roi, outputpath, filename, i, last_acta)
+				i = i + 1
 
+		loginfo("End crop_regions")
 		return i-1
 	
 	return 0
@@ -450,6 +456,8 @@ def get_main_area(img, acta):
 
 def save_crop(acta, crop, outputpath, boletin, index, last_acta):
 
+	loginfo("save_crop")
+
 	unique_colors = len(np.unique(crop.reshape(-1, crop.shape[2]), axis=0))
 	compression = [int(cv.IMWRITE_JPEG_QUALITY), cfg.jpg_compression]
 	fmerged = None
@@ -458,6 +466,8 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
 		return 0
 
 	if not acta and last_acta:
+		loginfo("merging")
+		
 		############################################################################################
 		# Es un Merged
 		############################################################################################
@@ -499,6 +509,7 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
 				if unique_colors  <= 256:
 					merged = cv.cvtColor(merged, cv.COLOR_BGR2GRAY)
 
+				loginfo("Saving: {0}".format(fmerged))
 				if ext.lower() == 'jpg':
 					cv.imwrite(fmerged, merged, compression)
 					add_resolution_to_jpg(fmerged,cfg.resolution) 
@@ -512,6 +523,7 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
 		else:
 			f = os.path.join(opath,'check','{0}_crop_{1}.{2}'.format(boletin, index, ext))
 
+		loginfo("Saving: {0}".format(f))
 		if ext.lower() == 'pcx':
 			# Mejorar esto por Dios
 			src = f.replace(ext, cfg.imgext[0])
@@ -530,10 +542,17 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
 		for ext in cfg.imgext:
 			last_file = os.path.join(outputpath, ext,'{0}.{1}'.format(last_acta, ext))
 			# Muevo el file anterior a check
-			shutil.move(last_file, os.path.join(outputpath, ext, 'check'))
-			fmerged = os.path.join(outputpath, ext, 'check', '{0}.merged.{1}'.format(last_acta, ext))
-			shutil.move(fmerged,last_file)
+			outpath = os.path.join(outputpath, ext, 'check')
 
+			dst_filename = os.path.join(outpath, os.path.basename(last_file))
+			loginfo("Moving: {0} to {1}".format(last_file, dst_filename))
+			shutil.move(last_file, outpath)
+
+			fmerged = os.path.join(outputpath, ext, 'check', '{0}.merged.{1}'.format(last_acta, ext))
+			dst_filename = os.path.join(outpath, os.path.basename(fmerged))
+			
+			loginfo("Moving: {0} to {1}".format(fmerged, dst_filename))
+			shutil.move(fmerged,last_file)
 
 	return 1
 
@@ -843,9 +862,10 @@ def process_pdf(pdf_file, force_page=None):
 
 			try:
 				total_regions = total_regions + crop_regions(img_file, workpath, outputpath, last_acta=last_acta, metadata=actas)
+
 			except Exception as msg:
-				print(str(msg))
-				sys.exit(-1)
+				logerror("Error:" + str(msg))
+				# sys.exit(-1)
 
 			widgets[0] = FormatLabel('[Página {0} de {1}]'.format(i,num_bars))
 
