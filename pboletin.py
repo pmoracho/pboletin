@@ -67,7 +67,7 @@ try:
 	import numpy as np
 	import glob
 	from operator import itemgetter
-	# import pprint
+	import pprint
 	import itertools
 	import os
 	import argparse
@@ -206,8 +206,8 @@ def loginfo(msg):
 	logging.info(msg.replace("|", " "))
 
 def logerror(msg):
-	msg = "Error: " + msg.replace("|", " ")
-	logging.info(msg)
+	msg = msg.replace("|", " ")
+	logging.error(msg)
 
 class Config:
 
@@ -247,7 +247,7 @@ class Config:
 		# int
 		for e in ["resolution", "artifact_min_size","ignore_first_pages", "ignore_last_pages",
 			"max_area", "min_area", "jpg_compression", "h_line_gap", "v_line_gap", "line_min_length",
-			"line_max_gap", "line_thres"]:
+			"line_max_gap", "line_thres", "theta"]:
 			self.__dict__[e] = int(self.__dict__[e])
 
 		# booleano
@@ -261,6 +261,7 @@ class Config:
 		parametros = (
 			"line_min_length              : {0}".format(int(self.line_min_length*self.compensation)),
 			"line_max_gap                 : {0}".format(int(self.line_max_gap*self.compensation)),
+			"theta                        : {0}".format(int(self.theta)),
 			"line_thres                   : {0}".format(int(self.line_thres*self.compensation)),
 			"line_rho                     : {0}".format(self.line_rho),
 			"resolution                   : {0}".format(self.resolution)
@@ -313,17 +314,16 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	# original_con_lineas_raw = np.copy(src)
 	loginfo("Copy original")
 	original_con_lineas = np.copy(src)
-
+	original_original_con_lineas = np.copy(src)
 	final = src
 
 	############################################################################
 	# Engroso la máscara para no perder lineas rectas
 	############################################################################
 	loginfo("Dilate")
-	clean_mask = cv.cvtColor(clean_mask, cv.COLOR_BGR2GRAY)
-	ret, clean_mask = cv.threshold(clean_mask, 10, 255, cv.THRESH_BINARY)
-	kernel = np.ones((7,7),np.uint8)
-	clean_mask_gray = cv.dilate(clean_mask,kernel,iterations = 1)
+	clean_mask_gray = cv.Canny(clean_mask,50,150,apertureSize = 3)
+	kernel = cv.getStructuringElement(cv.MORPH_CROSS, (2, 2)) 
+	clean_mask_gray = cv.dilate(clean_mask_gray, kernel, iterations=1)
 
 	############################################################################
 	# Detección de líneas rectas y generación de máscara de recorte
@@ -332,30 +332,35 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	crop_mask = np.zeros((height,width,3), np.uint8)
 	minLineLength = int(cfg.line_min_length*cfg.compensation)
 	maxLineGap = int(cfg.line_max_gap*cfg.compensation)
+	theta = int(cfg.theta)
 	thres = int(cfg.line_thres*cfg.compensation)
 	rho=cfg.line_rho
-	loginfo("Lines detection: rho {1} np.pi/500: {2} thres {3} minLineLength {4}, maxLineGap {5}".format(clean_mask_gray, rho, np.pi/500, thres, minLineLength, maxLineGap))
+	loginfo("Lines detection: rho {1} np.pi/500: {2} thres {3} minLineLength {4}, maxLineGap {5}, theta {6}".format(clean_mask_gray, rho, np.pi/300, thres, minLineLength, maxLineGap, theta))
 
 	linesP = None
-	linesP = cv.HoughLinesP(clean_mask_gray, rho, np.pi/500, thres, minLineLength=minLineLength, maxLineGap=maxLineGap)
+	linesP = cv.HoughLinesP(clean_mask_gray, rho, np.pi/300, thres, minLineLength=minLineLength, maxLineGap=maxLineGap)
+	
+	cv.imwrite(os.path.join(workpath,'01.original.png'), src)
+	cv.imwrite(os.path.join(workpath,'02.mask_bw_negative.png'), mask_bw_negative)
+	cv.imwrite(os.path.join(workpath,'03.clean_mask.png'), clean_mask)
+	cv.imwrite(os.path.join(workpath,'04.clean_mask_gray.png'), clean_mask_gray)
 	
 	if linesP is not None:
 
 		llorig = [e[0] for e in np.array(linesP).tolist()]
-		ll = process_lines(llorig,cfg.resolution)
+		for l in [e[1] for e in enumerate(llorig)]:
+			cv.line(original_original_con_lineas, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
+		if cfg.save_process_files:
+			cv.imwrite(os.path.join(workpath,'07.original_original con_lineas.png'), original_original_con_lineas)
+
+		ll = process_lines(src, llorig,cfg.resolution)
 		for l in [e[1] for e in enumerate(ll)]:
 			cv.line(original_con_lineas, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
 			cv.line(crop_mask, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
 
 		if cfg.save_process_files:
-			loginfo("Saving temp files")
-			cv.imwrite(os.path.join(workpath,'01.original.png'), src)
-			cv.imwrite(os.path.join(workpath,'02.mask_bw_negative.png'), mask_bw_negative)
-			cv.imwrite(os.path.join(workpath,'03.clean_mask.png'), clean_mask)
-			cv.imwrite(os.path.join(workpath,'04.clean_mask_gray.png'), clean_mask_gray)
 			cv.imwrite(os.path.join(workpath,'05.crop_mask.png'), crop_mask)
 			cv.imwrite(os.path.join(workpath,'06.original_con_lineas.png'), original_con_lineas)
-			# cv.imwrite(os.path.join(workpath,'07.original_con_lineas_raw.png'), original_con_lineas_raw)
 
 		############################################################################
 		# En base a la mascara obtengo los rectangulos de interes
@@ -411,6 +416,18 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	
 	return 0
 
+def show_lines(img, lista):
+
+	new = np.copy(img)
+
+	for l in [e[1] for e in enumerate(lista)]:
+		cv.line(new, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
+
+	cv.namedWindow("window", cv.WND_PROP_FULLSCREEN)
+	cv.setWindowProperty("window",cv.WND_PROP_FULLSCREEN,cv.WINDOW_FULLSCREEN)
+	cv.imshow("window", new)
+	cv.waitKey(0)
+	
 def get_main_area(img, acta):
 
 	remove = cfg.remove_pixels if cfg.remove_pixels else [0,0,0,0]
@@ -565,7 +582,14 @@ def get_acta(actas, region, r):
 
 	return None
 
-def process_lines(lista, in_res):
+def process_lines(img, lista, in_res):
+
+	############################################################################
+	# Ajustamos inclinaciones de las líneas
+	############################################################################
+	for l in lista:
+		l[0] = l[2] if abs(l[0] - l[2]) <= 3 else l[0]
+		l[1] = l[3] if abs(l[1] - l[3]) <= 3 else l[1]
 
 	verticales = [l for l in lista if l[0] == l[2]]
 	horizontales = [l for l in lista if l[1] == l[3]]
@@ -663,24 +687,39 @@ def simplificar(mylista, pair, level=5):
 
 	return newlist
 
+def print_lineas(mylista):
+	verticales = [l for l in mylista if l[0] == l[2]]
+	horizontales = [l for l in mylista if l[1] == l[3]]
+
+	print("Verticales ------------------------------")
+	pprint.pprint(verticales)
+	print("Horizontales ----------------------------")
+	pprint.pprint(horizontales)
+	print("-----------------------------------------")
+	
+
 def conectar_horizontales(mylista, level=50):
   
-  newlist = mylista[:]
+	# newlist = mylista[:]
+	# pprint.pprint(newlist)
 
-  verticales = [l for l in mylista if l[0] == l[2]]
-  horizontales = [l for l in mylista if l[1] == l[3]]
-  
-  xvert = {}
-  for i in [l[0] for l in verticales]:
-    for j in range(0, level):
-      xvert[i+j] = i
-      xvert[i-j] = i
+	verticales = [l for l in mylista if l[0] == l[2]]
+	verticales.sort(key=lambda x: abs(x[3]-x[1])) # Ordeno ascendente, para que valgan los y más largos
 
-  for i,l in enumerate(horizontales):
-    horizontales[i][0] = xvert.get(horizontales[i][0],horizontales[i][0])
-    horizontales[i][2] = xvert.get(horizontales[i][2],horizontales[i][2])
-  
-  return newlist
+	horizontales = [l for l in mylista if l[1] == l[3]]
+ 
+	xvert = {}
+	for i in [l[0] for l in verticales]:
+		for j in range(0, level):
+			xvert[i+j] = i
+			xvert[i-j] = i
+
+	for i,l in enumerate(horizontales):
+		horizontales[i][0] = xvert.get(horizontales[i][0],horizontales[i][0])
+		horizontales[i][2] = xvert.get(horizontales[i][2],horizontales[i][2])
+	
+	horizontales.extend(verticales)
+	return horizontales
 
 def conectar_verticales(mylista, level=50):
   
@@ -865,7 +904,6 @@ def process_pdf(pdf_file, force_page=None):
 
 			except Exception as msg:
 				logerror("Error:" + str(msg))
-				# sys.exit(-1)
 
 			widgets[0] = FormatLabel('[Página {0} de {1}]'.format(i,num_bars))
 
@@ -946,8 +984,12 @@ if __name__ == "__main__":
 			cfg.inputdir = args.inputpath
 
 		args.pdffile = os.path.join(cfg.inputdir, args.pdffile)
-		loginfo("Proces PDF : {0}".format(args.pdffile))
-		process_pdf(args.pdffile, args.debug_page)
+		loginfo("Process PDF : {0}".format(args.pdffile))
+
+		if os.path.isfile(args.pdffile):
+			process_pdf(args.pdffile, args.debug_page)
+		else:
+			logerror("No existe el archivo " + args.pdffile)
 
 	else:
 		cmdparser.print_help()
