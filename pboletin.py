@@ -202,7 +202,9 @@ def init_argparse():
 
 	return cmdparser
 
-def loginfo(msg):
+def loginfo(msg, printmsg=False):
+	if printmsg:
+		print(msg)
 	logging.info(msg.replace("|", " "))
 
 def logerror(msg):
@@ -276,8 +278,10 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 
 	filename, _ = os.path.splitext(os.path.basename(filepath))
 
+	############################################################################
 	# El calculo de todo esta hecho sobre una base de 300 dpi
 	# Hay que compensar si la resolucion es distinta
+	############################################################################
 	cfg.compensation = (cfg.resolution/300)
 
 	############################################################################
@@ -294,7 +298,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	############################################################################
 	# Me quedo solo con el color de las lineas rectas y el texto b y n (negativo)
 	############################################################################
-	loginfo("Mask image")
+	loginfo("Mask image (from {0} to {1})".format(cfg.linecolor_from, cfg.linecolor_to))
 	mask_bw_negative = cv.inRange(src, cfg.linecolor_from, cfg.linecolor_to)
 
 	############################################################################
@@ -700,9 +704,6 @@ def print_lineas(mylista):
 
 def conectar_horizontales(mylista, level=50):
   
-	# newlist = mylista[:]
-	# pprint.pprint(newlist)
-
 	verticales = [l for l in mylista if l[0] == l[2]]
 	verticales.sort(key=lambda x: abs(x[3]-x[1])) # Ordeno ascendente, para que valgan los y más largos
 
@@ -913,10 +914,11 @@ def process_pdf(pdf_file, force_page=None):
 	loginfo("Remove temp dir")
 
 	bar.finish()
-	print("")
-	print("-- Estatus -------------------------------------------")
+	loginfo("", printmsg=True)
+	loginfo("-- Estatus -------------------------------------------", printmsg=True)
+
 	if args.debug_page:
-		print("Carpeta temporal de trabajo  : {0}".format(workpath))
+		loginfo("Carpeta temporal de trabajo  : {0}".format(workpath), printmsg=True)
 	else:
 		shutil.rmtree(workpath)
 
@@ -926,17 +928,19 @@ def process_pdf(pdf_file, force_page=None):
 		if not os.path.isfile(f):
 			actas_error.append(a)
 
-	print("Total de actas               : {0}".format(total_actas))
-	print("Total de regiones recortadas : {0}".format(total_regions))
+	loginfo("Total de actas               : {0}".format(total_actas), printmsg=True)
+	loginfo("Total de regiones recortadas : {0}".format(total_regions), printmsg=True)
 	if actas_error:
-		print("Actas no encontradas         : {0}".format(",".join(actas_error)))
+		loginfo("Actas no encontradas         : {0}".format(",".join(actas_error)), printmsg=True)
 
 	if force_page:
-		print("Actas encontradas            : {0}".format(",".join(lista_actas)))
-		print("-- Configuración -------------------------------------")
-		print(cfg)
+		loginfo("Actas encontradas            : {0}".format(",".join(set(lista_actas)-set(actas_error))), printmsg=True)
+		loginfo("-- Configuración -------------------------------------", printmsg=True)
+		for l in str(cfg).split("\n"):
+			loginfo(l, printmsg=True)
 
-	loginfo("Finish process")
+	loginfo("------------------------------------------------------", printmsg=True)
+	loginfo("Finish process", printmsg=True)
 
 
 ################################################################################
