@@ -4,7 +4,7 @@ macholib==1.9
 numpy==1.14.5
 opencv-python==3.4.1.15
 pefile==2017.11.5
-Pillow==5.2.0
+Pillow==6.2.0
 progressbar2==3.38.0
 PyInstaller==3.3.1
 pypiwin32==223
