@@ -1,8 +1,12 @@
 /boletines
 /venv
+/.venv
 /build
 /pboletin.plus.ini
 /pboletin.spec
 /__pycache__
 /dist
 /tests/__pycache__
+/out
+pboletin.log
+settings.json
