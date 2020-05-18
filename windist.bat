@@ -28,7 +28,7 @@ REM Carpeta de pdftools
 REM --------------------------------------------------------
 @mkdir dist\pboletin\pdftools
 @copy tools\pdftools\* dist\pboletin\pdftools
-@copy tools\procesar_boletin.bat dist\pboletin
+REM @copy tools\procesar_boletin.bat dist\pboletin
 
 REM --------------------------------------------------------
 REM Eliminar archivos de trabajo
