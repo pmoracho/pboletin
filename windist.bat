@@ -19,8 +19,9 @@ REM --------------------------------------------------------
 
 REM --------------------------------------------------------
 REM Ini de la applicación
+REM !! Copiar manualmente si es necesario
 REM --------------------------------------------------------
-@copy pboletin.ini dist\pboletin\pboletin.ini
+REM @copy pboletin.ini dist\pboletin\pboletin.ini
 
 REM --------------------------------------------------------
 REM Carpeta de pdftools
