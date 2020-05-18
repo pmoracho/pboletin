@@ -372,7 +372,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 		loginfo("Contours")
 		gray = cv.cvtColor(crop_mask, cv.COLOR_BGR2GRAY) # convert to grayscale
 		retval, thresh_gray = cv.threshold(gray, thresh=1, maxval=255, type=cv.THRESH_BINARY_INV)
-		image, contours, hierarchy = cv.findContours(thresh_gray,cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE )
+		contours, hierarchy = cv.findContours(thresh_gray,cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE )
 
 		############################################################################
 		# Recorto los rectangulos
@@ -440,7 +440,7 @@ def get_main_area(img, acta):
 	ret,thresh = cv.threshold(gray,127,255,cv.THRESH_BINARY_INV)
 	kernel = np.ones((7,7),np.uint8)
 	gray = cv.dilate(thresh,kernel,iterations = 1)
-	im2, ctrs, hier = cv.findContours(gray.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+	ctrs, hier = cv.findContours(gray.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 	l = [(t[0], t[1], t[0]+t[2], t[1]+t[3])  for t in [cv.boundingRect(ctr) for ctr in ctrs]]
 	height, width, channels = img.shape
 
