@@ -861,7 +861,7 @@ def process_pdf(pdf_file, force_page=None):
 	for p in range(firstp,endp+1):
 
 		loginfo("Extract page {0} of {1}".format(i,num_bars))
-		cmdline = '{0} -png -f {3} -l {4} -r {5} {1} {2}/pagina'.format(
+		cmdline = '{0} -q -png -f {3} -l {4} -r {5} {1} {2}/pagina'.format(
 			cfg.pdftoppm_bin,
 			pdf_file,
 			workpath,
