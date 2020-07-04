@@ -66,6 +66,7 @@ try:
 	import cv2 as cv
 	import numpy as np
 	import glob
+	import shutil
 	from operator import itemgetter
 	import pprint
 	import itertools
@@ -253,7 +254,7 @@ class Config:
 			self.__dict__[e] = int(self.__dict__[e])
 
 		# booleano
-		for e in ["save_process_files"]:
+		for e in ["save_process_files", "export_logos"]:
 			self.__dict__[e] = True if self.__dict__[e] == "True" else False
 
 		self.compensation = self.resolution/300
@@ -354,8 +355,6 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 		llorig = [e[0] for e in np.array(linesP).tolist()]
 		for l in [e[1] for e in enumerate(llorig)]:
 			cv.line(original_original_con_lineas, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
-		if cfg.save_process_files:
-			cv.imwrite(os.path.join(workpath,'07.original_original con_lineas.png'), original_original_con_lineas)
 
 		ll = process_lines(src, llorig,cfg.resolution)
 		for l in [e[1] for e in enumerate(ll)]:
@@ -516,8 +515,6 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
 		unique_colors = len(np.unique(merged.reshape(-1, merged.shape[2]), axis=0))
 
 		for ext in cfg.imgext:
-
-			# Muevo el file anterior a check
 			# shutil.move(last_file, os.path.join(outputpath, ext, 'check'))
 
 			fmerged = os.path.join(outputpath, ext, 'check', '{0}.merged.{1}'.format(last_acta, ext))
@@ -750,7 +747,7 @@ def pdf_count_pages(filename):
 	loginfo("Get PDF info")
 	cmdline = '{0} {1}'.format(cfg.pdfinfo_bin,filename)
 	loginfo(cmdline)
-	process = subprocess.Popen(cmdline, stdout=subprocess.PIPE)
+	process = subprocess.Popen(cmdline.split(" "), stdout=subprocess.PIPE)
 	out, err = process.communicate()
 	rxcountpages = re.compile(cfg.rxcountpages, re.MULTILINE|re.DOTALL)
 	m = re.findall(rxcountpages, out.decode('latin1'))
@@ -847,6 +844,10 @@ def process_pdf(pdf_file, force_page=None):
 	loginfo("Create outputp dir")
 	os.makedirs(outputpath, exist_ok=True)
 
+	if cfg.export_logos:
+		loginfo("Create logo folder")
+		os.makedirs(os.path.join(outputpath, "logos"), exist_ok=True)
+
 	loginfo("Extract PDF pages form {0}".format(pdf_file))
 	maxz = len(str(total_pages))
 	i=1
@@ -861,6 +862,20 @@ def process_pdf(pdf_file, force_page=None):
 	for p in range(firstp,endp+1):
 
 		loginfo("Extract page {0} of {1}".format(i,num_bars))
+		if cfg.export_logos:
+			cmdline = '{0} -png -q -f {3} -l {4} {1} {2}/pagina-{5}'.format(
+				cfg.pdfimages_bin,
+				pdf_file,
+				workpath,
+				p,
+				p,
+				p
+			)
+			loginfo(cmdline)
+			with subprocess.Popen(cmdline, shell=True) as proc:
+				pass
+
+
 		cmdline = '{0} -q -png -f {3} -l {4} -r {5} {1} {2}/pagina'.format(
 			cfg.pdftoppm_bin,
 			pdf_file,
@@ -889,7 +904,6 @@ def process_pdf(pdf_file, force_page=None):
 
 		img_file = "pagina-{0}.png".format(str(p).zfill(maxz))
 		img_file = os.path.join(workpath, img_file)
-
 		actas = get_metadata(cfg,html)
 		loginfo("Actas encontradas: {0}".format(str(actas)))
 
@@ -897,7 +911,8 @@ def process_pdf(pdf_file, force_page=None):
 
 			last_acta = lista_actas[-1] if lista_actas else None
 
-			lista_actas.extend([a[2] for a in actas[2]])
+			actas_pagina = [a[2] for a in actas[2]]
+			lista_actas.extend(actas_pagina)
 			total_actas = total_actas + (len(actas[2]) if actas is not None else 0)
 
 			try:
@@ -905,6 +920,16 @@ def process_pdf(pdf_file, force_page=None):
 
 			except Exception as msg:
 				logerror("Error:" + str(msg))
+
+			if cfg.export_logos:
+				num = 0
+				# print(os.path.join(workpath,"pagina-{0}-*.png".format(p)))
+				for logo in sorted(glob.glob(os.path.join(workpath,"pagina-{0}-*.png".format(p)))):
+					# print(logo)
+					# print(actas_pagina[i])
+					dest = os.path.join(outputpath, "logos", "{0}.png".format(actas_pagina[num]))
+					shutil.copyfile(logo, dest)
+					num = num + 1
 
 			widgets[0] = FormatLabel('[Página {0} de {1}]'.format(i,num_bars))
 
