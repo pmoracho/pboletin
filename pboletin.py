@@ -79,7 +79,7 @@ try:
 	from progressbar import RotatingMarker
 	from progressbar import ETA
 	import logging
-	from configparser import ConfigParser
+
 	import subprocess
 	import tempfile
 	import shutil
@@ -89,6 +89,8 @@ try:
 	import statistics
 	from PIL import Image
 	from struct import *
+	from Config import Config
+	from tools import add_resolution_to_jpg
 
 except ImportError as err:
 	modulename = err.args[0].partition("'")[-1].rpartition("'")[0]
@@ -211,69 +213,6 @@ def loginfo(msg, printmsg=False):
 def logerror(msg):
 	msg = msg.replace("|", " ")
 	logging.error(msg)
-
-class Config:
-
-	def __init__(self, file=None):
-
-		self.file = file
-		self.config = ConfigParser()
-		if self.file:
-			self._load()
-
-	def set_file(self, file):
-
-		self.file = file
-		if self.file:
-			self._load()
-
-	def _load(self):
-		self.config.read(self.file)
-		self.__dict__.update(dict(self.config.items("GLOBAL")))
-
-		# lista
-		for e in ["imgext"]:
-			self.__dict__[e] = self.__dict__[e].split(',')
-
-		# lista in
-		for e in ["remove_pixels"]:
-			self.__dict__[e] = list(map(int,self.__dict__[e].split(',')))
-
-		# np.array
-		for e in ["linecolor_from" , "linecolor_to"]:
-			self.__dict__[e] = np.array(list(map(int,self.__dict__[e].split(','))))
-
-		# floatr
-		for e in ["line_rho"]:
-			self.__dict__[e] = float(self.__dict__[e])
-
-		# int
-		for e in ["resolution", "artifact_min_size","ignore_first_pages", "ignore_last_pages",
-			"max_area", "min_area", "jpg_compression", "h_line_gap", "v_line_gap", "line_min_length",
-			"line_max_gap", "line_thres", "theta"]:
-			self.__dict__[e] = int(self.__dict__[e])
-
-		# booleano
-		for e in ["save_process_files", "export_logos"]:
-			self.__dict__[e] = True if self.__dict__[e] == "True" else False
-
-		self.compensation = self.resolution/300
-	
-	def __str__(self):
-		
-		parametros = (
-			"line_min_length              : {0}".format(int(self.line_min_length*self.compensation)),
-			"line_max_gap                 : {0}".format(int(self.line_max_gap*self.compensation)),
-			"theta                        : {0}".format(int(self.theta)),
-			"line_thres                   : {0}".format(int(self.line_thres*self.compensation)),
-			"line_rho                     : {0}".format(self.line_rho),
-			"resolution                   : {0}".format(self.resolution)
-			)
-
-		return "\n".join(parametros)
-	
-
-cfg = Config()
 
 def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 
@@ -419,18 +358,6 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
 	
 	return 0
 
-def show_lines(img, lista):
-
-	new = np.copy(img)
-
-	for l in [e[1] for e in enumerate(lista)]:
-		cv.line(new, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_AA)
-
-	cv.namedWindow("window", cv.WND_PROP_FULLSCREEN)
-	cv.setWindowProperty("window",cv.WND_PROP_FULLSCREEN,cv.WINDOW_FULLSCREEN)
-	cv.imshow("window", new)
-	cv.waitKey(0)
-	
 def get_main_area(img, acta):
 
 	remove = cfg.remove_pixels if cfg.remove_pixels else [0,0,0,0]
@@ -688,17 +615,6 @@ def simplificar(mylista, pair, level=5):
 
 	return newlist
 
-def print_lineas(mylista):
-	verticales = [l for l in mylista if l[0] == l[2]]
-	horizontales = [l for l in mylista if l[1] == l[3]]
-
-	print("Verticales ------------------------------")
-	pprint.pprint(verticales)
-	print("Horizontales ----------------------------")
-	pprint.pprint(horizontales)
-	print("-----------------------------------------")
-	
-
 def conectar_horizontales(mylista, level=50):
   
 	verticales = [l for l in mylista if l[0] == l[2]]
@@ -782,32 +698,6 @@ def get_metadata(cfg, html):
 		return (x, y, list( (int(e.group(2)),int(e.group(1)),e.group(3).replace('.','')) for e in m ))
 	else:
 		return None
-
-def add_resolution_to_jpg(filename, resolution):
-	"""add_resolution_to_jpg: Agrega info de la resolución al archivo
-
-	Debido a problemas a la hora de incrustar imagenes en el Word resulta
-	necesario agregar al header del JPG la información de la resolución
-	Vertical y horizontal, debido a que opencv no salva esta información.
-
-	Args:
-		filename (str): Path completo al archivo jpg
-		resolution (int): Resolución
-
-	Example:
-		>>> add_resolution_to_jpg("c:\prueba.jpg", 150) # 150 dpi
-
-	"""
-	struct_fmt = '>6s5sHBHH'
-	struct_len = calcsize(struct_fmt)
-
-	with open(filename, "rb") as f:
-		header = unpack(struct_fmt, f.read(struct_len))
-		data = f.read()
-
-	with open(filename, "wb") as f:
-		f.write(pack(struct_fmt, header[0], header[1], header[2], header[3], resolution, resolution))
-		f.write(data)
 
 
 def process_pdf(pdf_file, force_page=None):
@@ -972,6 +862,8 @@ def process_pdf(pdf_file, force_page=None):
 #  Cuerpo principal
 ################################################################################
 if __name__ == "__main__":
+
+	cfg = Config()
 
 	cmdparser = init_argparse()
 	try:
