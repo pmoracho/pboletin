@@ -38,8 +38,8 @@ class Config:
             self.__dict__[e] = float(self.__dict__[e])
 
         # int
-        for e in ["resolution", "artifact_min_size", 
-        "ignore_first_pages", "ignore_last_pages",
+        for e in ["resolution", "artifact_min_size",
+                  "ignore_first_pages", "ignore_last_pages",
                   "max_area", "min_area", "jpg_compression", "h_line_gap", "v_line_gap", "line_min_length",
                   "line_max_gap", "line_thres", "theta"]:
             self.__dict__[e] = int(self.__dict__[e])

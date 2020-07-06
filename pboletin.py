@@ -247,7 +247,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
     ############################################################################
     loginfo("Dilate")
     clean_mask_gray = cv.Canny(clean_mask, 50, 150, apertureSize=3)
-    kernel = cv.getStructuringElement(cv.MORPH_CROSS, (2, 2)) 
+    kernel = cv.getStructuringElement(cv.MORPH_CROSS, (2, 2))
     clean_mask_gray = cv.dilate(clean_mask_gray, kernel, iterations=1)
 
     ############################################################################
@@ -440,7 +440,7 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
                 loginfo("Saving: {0}".format(fmerged))
                 if ext.lower() == 'jpg':
                     cv.imwrite(fmerged, merged, compression)
-                    add_resolution_to_jpg(fmerged, cfg.resolution) 
+                    add_resolution_to_jpg(fmerged, cfg.resolution)
                 else:
                     cv.imwrite(fmerged, merged, compression)
 
@@ -539,7 +539,7 @@ def process_lines(img, lista, in_res):
     # Bajo el recorte del top
     ############################################################################
     for i, e in enumerate(newlista):
-        newlista[i][1] = min_y+10 if e[1] == min_y else e[1] 
+        newlista[i][1] = min_y+10 if e[1] == min_y else e[1]
         newlista[i][3] = min_y+10 if e[3] == min_y else e[3]
 
     min_y = min_y + 10
@@ -793,7 +793,11 @@ def process_pdf(pdf_file, force_page=None):
             total_actas = total_actas + (len(actas[2]) if actas is not None else 0)
 
             try:
-                total_regions = total_regions + crop_regions(img_file, workpath, outputpath, last_acta=last_acta, metadata=actas)
+                total_regions = total_regions + crop_regions(img_file,
+                                                             workpath,
+                                                             outputpath,
+                                                             last_acta=last_acta,
+                                                             metadata=actas)
 
             except Exception as msg:
                 logerror("Error:" + str(msg))
@@ -876,7 +880,11 @@ if __name__ == "__main__":
 
         if args.logfile:
             log_level = getattr(logging, args.loglevel.upper(), None)
-            logging.basicConfig(filename=args.logfile, level=log_level, format='%(asctime)s|%(levelname)s|%(message)s', datefmt='%Y/%m/%d %I:%M:%S', filemode='w')	
+            logging.basicConfig(filename=args.logfile, 
+                                level=log_level, 
+                                format='%(asctime)s|%(levelname)s|%(message)s', 
+                                datefmt='%Y/%m/%d %I:%M:%S',
+                                filemode='w')
 
         try:
             loginfo("Config file: {0}".format(configfile))
