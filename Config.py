@@ -25,7 +25,7 @@ class Config:
         for e in ["imgext"]:
             self.__dict__[e] = self.__dict__[e].split(',')
 
-        # lista in
+        # lista int
         for e in ["remove_pixels"]:
             self.__dict__[e] = list(map(int, self.__dict__[e].split(',')))
 
@@ -41,8 +41,11 @@ class Config:
         for e in ["resolution", "artifact_min_size",
                   "ignore_first_pages", "ignore_last_pages",
                   "max_area", "min_area", "jpg_compression", "h_line_gap", "v_line_gap", "line_min_length",
-                  "line_max_gap", "line_thres", "theta"]:
-            self.__dict__[e] = int(self.__dict__[e])
+                  "line_max_gap", "line_thres", "theta", "debug_page", "from_page", "to_page"]:
+            try:
+                self.__dict__[e] = int(self.__dict__[e])
+            except ValueError:
+                self.__dict__[e] = None
 
         # booleano
         for e in ["save_process_files", "export_logos"]:

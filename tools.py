@@ -1,8 +1,12 @@
 from struct import calcsize
 from struct import pack
 from struct import unpack
+import logging
 import tempfile
 import os
+import sys
+import re
+import subprocess
 
 
 def add_resolution_to_jpg(filename, resolution):
@@ -61,3 +65,37 @@ def expand_filename(filename):
             filename.replace(path_keyword, replace_paths[path_keyword]())
 
     return filename
+
+
+def loginfo(msg, printmsg=False):
+    if printmsg:
+        print(msg)
+    logging.info(msg.replace("|", " "))
+
+
+def logerror(msg):
+    logging.error(msg.replace("|", " "))
+
+
+def resource_path(relative):
+    """Obtiene un path, toma en consideración el uso de pyinstaller"""
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, relative)
+    return os.path.join(relative)
+
+
+def pdf_count_pages(filename, pdfinfo_bin, rxcountpages):
+    """pdf_get_metadata: cuenta la cantidad de páginas de un PDF
+
+    Args:
+        filename(str): Path completo al archivo PDF
+    """
+    loginfo("Get PDF info")
+    cmdline = '{0} {1}'.format(pdfinfo_bin, filename)
+    loginfo(cmdline)
+    process = subprocess.Popen(cmdline.split(" "), stdout=subprocess.PIPE)
+    out, err = process.communicate()
+    rxcountpages = re.compile(rxcountpages, re.MULTILINE | re.DOTALL)
+    m = re.findall(rxcountpages, out.decode('latin1'))
+
+    return int(m[0]) if m else None

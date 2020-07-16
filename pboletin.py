@@ -35,17 +35,17 @@ __copyright__ = "(c) 2018, %s" % (__author__)
 __version__ = "1.0"
 __date__ = "2018/06/02"
 
-import shutil
-import os
 import argparse
-import logging
-import subprocess
-import tempfile
-import re
-import statistics
-import glob
-import sys
 import gettext
+import glob
+import logging
+import os
+import re
+import shutil
+import statistics
+import subprocess
+import sys
+import tempfile
 
 try:
     from gettext import gettext as _
@@ -83,6 +83,10 @@ try:
     from PIL import Image
     from Config import Config
     from tools import add_resolution_to_jpg
+    from tools import pdf_count_pages
+    from tools import loginfo
+    from tools import logerror
+    from show import show_results
 
 except ImportError as err:
     modulename = err.args[0].partition("'")[-1].rpartition("'")[0]
@@ -114,65 +118,65 @@ def init_argparse():
                             "help": _("Boletín en PDF a procesar")
                 },
                 "--version -v": {
-                            "action":	"version",
-                            "version":	__version__,
-                            "help":		_("Mostrar el número de versión y salir")
+                            "action": "version",
+                            "version": __version__,
+                            "help":	_("Mostrar el número de versión y salir")
                 },
                 "--config -c": {
-                            "type":	 str,
-                            "action":	 "store",
-                            "dest":	 "configfile",
-                            "default":	None,
-                            "help":		_("Establecer el archivo de configuración del proceso de recorte. Por defecto se busca 'pboleti.ini'.")
+                            "type":	str,
+                            "action": "store",
+                            "dest": "configfile",
+                            "default": None,
+                            "help": _("Establecer el archivo de configuración del proceso de recorte. Por defecto se busca 'pboleti.ini'.")
                 },
                 "--debug-page -p": {
-                            "type":	 int,
-                            "action":	 "store",
-                            "dest":	 "debug_page",
-                            "default":	None,
-                            "help":		_("Establecer el proceso de una determinada página para debug.")
+                            "type":	int,
+                            "action": "store",
+                            "dest":	"debug_page",
+                            "default": None,
+                            "help":	_("Establecer el proceso de una determinada página para debug.")
                 },
                 "--log-level -n": {
-                            "type":	 str,
-                            "action":	 "store",
-                            "dest":	 "loglevel",
-                            "default":	"info",
-                            "help":		_("Nivel de log")
+                            "type":	str,
+                            "action": "store",
+                            "dest":	"loglevel",
+                            "default": "info",
+                            "help":	_("Nivel de log")
                 },
                 "--input-path -i": {
-                            "type":	 str,
-                            "action":	 "store",
-                            "dest":	 "inputpath",
-                            "default":	None,
-                            "help":		_("Carpeta dónde se alojan los boletines en pdf a procesa")
+                            "type":	str,
+                            "action": "store",
+                            "dest":	"inputpath",
+                            "default": None,
+                            "help":	_("Carpeta dónde se alojan los boletines en pdf a procesa")
                 },
                 "--log-file -l": {
-                            "type":	 str,
-                            "action":	 "store",
-                            "dest":	 "logfile",
-                            "default":	None,
-                            "help":		_("Archivo de log"),
-                            "metavar":  "file"
+                            "type":	str,
+                            "action": "store",
+                            "dest":	"logfile",
+                            "default": None,
+                            "help":	_("Archivo de log"),
+                            "metavar": "file"
                 },
                 "--from-page -f": {
-                            "type":	 int,
-                            "action":	 "store",
-                            "dest":	 "from_page",
-                            "default":	None,
-                            "help":		_("Desde que página se procesará del PDF")
+                            "type":	int,
+                            "action": "store",
+                            "dest":	"from_page",
+                            "default": None,
+                            "help":	_("Desde que página se procesará del PDF")
                 },
                 "--to-page -t": {
-                            "type":	 int,
-                            "action":	 "store",
-                            "dest":	 "to_page",
-                            "default":	None,
-                            "help":		_("Hasta que página se procesará del PDF")
+                            "type":	int,
+                            "action": "store",
+                            "dest":	"to_page",
+                            "default": 0None,
+                            "help":	_("Hasta que página se procesará del PDF")
                 },
                 "--quiet -q": {
-                            "action":	 "store_true",
-                            "dest":	 "quiet",
-                            "default":	False,
-                            "help":		_("Modo silencioso sin mostrar barra de progreso.")
+                            "action": "store_true",
+                            "dest":	"quiet",
+                            "default": False,
+                            "help":	_("Modo silencioso sin mostrar barra de progreso.")
                 }
         }
 
@@ -183,17 +187,6 @@ def init_argparse():
         cmdparser.add_argument(*args, **kwargs)
 
     return cmdparser
-
-
-def loginfo(msg, printmsg=False):
-    if printmsg:
-        print(msg)
-    logging.info(msg.replace("|", " "))
-
-
-def logerror(msg):
-    msg = msg.replace("|", " ")
-    logging.error(msg)
 
 
 def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
@@ -641,23 +634,6 @@ def conectar_verticales(mylista, level=50):
     return newlist
 
 
-def pdf_count_pages(filename):
-    """pdf_get_metadata: cuenta la cantidad de páginas de un PDF
-
-    Args:
-        filename(str): Path completo al archivo PDF
-    """
-    loginfo("Get PDF info")
-    cmdline = '{0} {1}'.format(cfg.pdfinfo_bin, filename)
-    loginfo(cmdline)
-    process = subprocess.Popen(cmdline.split(" "), stdout=subprocess.PIPE)
-    out, err = process.communicate()
-    rxcountpages = re.compile(cfg.rxcountpages, re.MULTILINE | re.DOTALL)
-    m = re.findall(rxcountpages, out.decode('latin1'))
-
-    return int(m[0]) if m else None
-
-
 def get_metadata(cfg, html):
     """get_metadata: extrae información del boletin en el PDF
 
@@ -693,7 +669,7 @@ def process_pdf(pdf_file, force_page=None):
     lista_actas = []
     total_actas = 0
     total_regions = 0
-    total_pages = pdf_count_pages(pdf_file)
+    total_pages = pdf_count_pages(pdf_file, cfg.pdfinfo_bin, cfg.rxcountpages)
 
     loginfo("{0} has {1} pages".format(pdf_file, total_pages))
 
@@ -808,8 +784,11 @@ def process_pdf(pdf_file, force_page=None):
                 for logo in sorted(glob.glob(os.path.join(workpath, "pagina-{0}-*.png".format(p)))):
                     # print(logo)
                     # print(actas_pagina[i])
-                    dest = os.path.join(outputpath, "logos", "{0}.png".format(actas_pagina[num]))
-                    shutil.copyfile(logo, dest)
+                    dest = os.path.join(outputpath, "logos", "{0}.jpg".format(actas_pagina[num]))
+                    img = cv.imread(logo)
+                    cv.imwrite(dest, img)
+
+                    # shutil.copyfile(logo, dest)
                     num = num + 1
 
             widgets[0] = FormatLabel('[Página {0} de {1}]'.format(i, num_bars))
@@ -848,6 +827,8 @@ def process_pdf(pdf_file, force_page=None):
     loginfo("------------------------------------------------------", printmsg=True)
     loginfo("Finish process", printmsg=True)
 
+    if args.debug_page:
+        show_results(workpath, outputpath, lista_actas)
 
 ################################################################################
 #  Cuerpo principal
