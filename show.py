@@ -39,8 +39,6 @@ def compare_images(outpath):
     import glob
 
     carpeta_recortes = os.path.join(outpath, 'jpg')
-    carpeta_logos = os.path.join(outpath, 'logos')
-    carpeta_txt = os.path.join(outpath, 'txt')
     for f in glob.glob( os.path.join(carpeta_recortes, "*.jpg")):
         filename = os.path.basename(f)
         acta, file_extension = os.path.splitext(filename)
@@ -49,11 +47,12 @@ def compare_images(outpath):
         logo = os.path.join(outpath, 'logos', "{0}.jpg".format(acta))
         recorte = recorte if os.path.isfile(recorte) else text_img(outpath, "No existe recorte acta: {0}".format(acta))
         logo = logo if os.path.isfile(logo) else text_img(outpath, "No existe logo acta: {0}".format(acta))
-
+        """
         imgs = {
             "Acta : {0} (recorte)".format(acta): cv2.imread(recorte),
             "Acta : {0} (logo)".format(acta): cv2.imread(logo)
         }
+        """
         img1, img2 = cv2.imread(recorte), cv2.imread(logo)
         merged = merge_h_images(img1, img2)
         cv2.namedWindow(acta, cv2.WND_PROP_AUTOSIZE)
@@ -127,6 +126,7 @@ def text_img(workpath, texto):
     cv2.imwrite(img, im)
 
     return(img)
+
 
 ################################################################################
 #  Cuerpo principal
