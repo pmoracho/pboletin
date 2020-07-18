@@ -48,7 +48,7 @@ class Config:
                 self.__dict__[e] = None
 
         # booleano
-        for e in ["save_process_files", "export_logos"]:
+        for e in ["save_process_files", "export_logos", "only_horizontal"]:
             self.__dict__[e] = True if self.__dict__[e] == "True" else False
 
         self.compensation = self.resolution/300

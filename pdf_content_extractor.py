@@ -87,28 +87,14 @@ def determine_image_type(stream_first_4_bytes):
     file_type = None
     bytes_as_hex = b2a_hex(stream_first_4_bytes)
     if bytes_as_hex.startswith(b'ffd8'):
-        file_type = '.jpg'
+        file_type = 'jpg'
     elif bytes_as_hex == b'89504e47':
-        file_type = '.png'
+        file_type = 'png'
     elif bytes_as_hex == b'47494638':
-        file_type = '.gif'
+        file_type = 'gif'
     elif bytes_as_hex.startswith(b'424d'):
-        file_type = '.bmp'
+        file_type = 'bmp'
     return file_type
-
-
-def save_image2(lt_image, page_number, images_folder):
-    """Try to save the image data from this LTImage object, and return the file name, if successful"""
-    result = None
-    if lt_image.stream:
-        file_stream = lt_image.stream.get_rawdata()
-        if file_stream:
-            file_ext = determine_image_type(file_stream[0:4])
-            if file_ext:
-                file_name = ''.join([str(page_number), '_', lt_image.name, file_ext])
-                if write_file(images_folder, file_name, file_stream, flags='wb'):
-                    result = file_name
-    return result
 
 
 def save_image(lt_image, images_folder, n=None):
@@ -120,9 +106,9 @@ def save_image(lt_image, images_folder, n=None):
         file_ext = determine_image_type(file_stream[0:4])
         if file_ext:
             if not n:
-                file_name = '{0}{1}'.format(lt_image.name, file_ext)
+                file_name = '{0}.{1}'.format(lt_image.name, file_ext)
             else:
-                file_name = 'logo-{0}{1}'.format(n, file_ext)
+                file_name = 'logo-{0}.{1}'.format(n, file_ext)
 
             if write_file(images_folder, file_name, lt_image.stream.get_rawdata(), flags='wb'):
                 result = os.path.join(images_folder, file_name)

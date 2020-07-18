@@ -37,7 +37,6 @@ __date__ = "2018/06/02"
 
 import argparse
 import gettext
-import glob
 import logging
 import os
 import re
@@ -86,7 +85,10 @@ try:
     from tools import pdf_count_pages
     from tools import loginfo
     from tools import logerror
+    from tools import clean_blank_area
+    from tools import make_wide
     from show import show_results
+    from pboletin_logo import logos_from_pdf
 
 except ImportError as err:
     modulename = err.args[0].partition("'")[-1].rpartition("'")[0]
@@ -107,7 +109,7 @@ def init_argparse():
                                         description="%s\n%s\n" % (__appdesc__, __copyright__),
                                         epilog="",
                                         add_help=True,
-                                        formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=45)
+                                        formatter_class=make_wide(argparse.HelpFormatter, w=80, h=42)
                                         )
 
     opciones = {
@@ -169,7 +171,7 @@ def init_argparse():
                             "type":	int,
                             "action": "store",
                             "dest":	"to_page",
-                            "default": 0None,
+                            "default": None,
                             "help":	_("Hasta que página se procesará del PDF")
                 },
                 "--quiet -q": {
@@ -177,6 +179,12 @@ def init_argparse():
                             "dest":	"quiet",
                             "default": False,
                             "help":	_("Modo silencioso sin mostrar barra de progreso.")
+                },
+                "--logos -e": {
+                            "action": "store_true",
+                            "dest":	"logos",
+                            "default": False,
+                            "help":	_("Extracción de logos")
                 }
         }
 
@@ -552,6 +560,12 @@ def process_lines(img, lista, in_res):
     newlista = list(map(list, set(map(tuple, newlista))))
 
     ############################################################################
+    # Dejar solo horizontales
+    ############################################################################
+    if cfg.only_horizontal:
+        newlista = [linea for linea in newlista if linea[1] == linea[3]]
+
+    ############################################################################
     # Conectar lineas horizontales con las verticales
     ############################################################################
     newlista = conectar_horizontales(newlista, int(cfg.h_line_gap*cfg.compensation))
@@ -664,31 +678,34 @@ def get_metadata(cfg, html):
         return None
 
 
-def process_pdf(pdf_file, force_page=None):
+def process_pdf(cfg, pdf_file, quiet=False):
 
     lista_actas = []
     total_actas = 0
     total_regions = 0
     total_pages = pdf_count_pages(pdf_file, cfg.pdfinfo_bin, cfg.rxcountpages)
 
+    print("\nRecorte de actas\n")
+
     loginfo("{0} has {1} pages".format(pdf_file, total_pages))
 
-    if not force_page:
-        if cfg.detect_export_pages:
+    if not cfg.debug_page:
+        firstp = cfg.from_page if cfg.from_page else (cfg.ignore_first_pages+1)
+        endp = cfg.to_page if cfg.to_page else (total_pages-cfg.ignore_last_pages)+1
+
+        if cfg.detect_export_pages and (not cfg.from_page and not cfg.to_page):
             firstp = 1
             endp = total_pages
-        else:
-            firstp = args.from_page if args.from_page else (cfg.ignore_first_pages+1)
-            endp = args.to_page if args.to_page else (total_pages-cfg.ignore_last_pages)+1
 
         num_bars = (endp - firstp) + 1
     else:
-        firstp = force_page
-        endp = force_page
+        firstp = cfg.debug_page
+        endp = cfg.debug_page
         num_bars = 1
 
-    widgets = [FormatLabel(''), ' ', Percentage(), ' ', Bar('#'), ' ', ETA(), ' ', RotatingMarker()]
-    bar = ProgressBar(widgets=widgets, maxval=num_bars)
+    if not quiet:
+        widgets = [FormatLabel(''), ' ', Percentage(), ' ', Bar('#'), ' ', ETA(), ' ', RotatingMarker()]
+        bar = ProgressBar(widgets=widgets, maxval=num_bars)
 
     loginfo("Create temp dir")
     workpath = tempfile.mkdtemp()
@@ -697,10 +714,6 @@ def process_pdf(pdf_file, force_page=None):
     outputpath = os.path.join(cfg.outputdir, filename)
     loginfo("Create outputp dir")
     os.makedirs(outputpath, exist_ok=True)
-
-    if cfg.export_logos:
-        loginfo("Create logo folder")
-        os.makedirs(os.path.join(outputpath, "logos"), exist_ok=True)
 
     loginfo("Extract PDF pages form {0}".format(pdf_file))
     maxz = len(str(total_pages))
@@ -778,33 +791,28 @@ def process_pdf(pdf_file, force_page=None):
             except Exception as msg:
                 logerror("Error:" + str(msg))
 
-            if cfg.export_logos:
-                num = 0
-                # print(os.path.join(workpath,"pagina-{0}-*.png".format(p)))
-                for logo in sorted(glob.glob(os.path.join(workpath, "pagina-{0}-*.png".format(p)))):
-                    # print(logo)
-                    # print(actas_pagina[i])
-                    dest = os.path.join(outputpath, "logos", "{0}.jpg".format(actas_pagina[num]))
-                    img = cv.imread(logo)
-                    cv.imwrite(dest, img)
+            if not quiet:
+                widgets[0] = FormatLabel('[Página {0} de {1}]'.format(i, num_bars))
 
-                    # shutil.copyfile(logo, dest)
-                    num = num + 1
+        if not quiet:
+            bar.update(i)
 
-            widgets[0] = FormatLabel('[Página {0} de {1}]'.format(i, num_bars))
-
-        bar.update(i)
         i = i + 1
 
     loginfo("Remove temp dir")
 
-    bar.finish()
-    loginfo("", printmsg=True)
-    loginfo("-- Estatus -------------------------------------------", printmsg=True)
+    if not quiet:
+        bar.finish()
 
-    if args.debug_page:
-        loginfo("Carpeta temporal de trabajo  : {0}".format(workpath), printmsg=True)
-    else:
+    printmsg = True if not quiet else False
+
+    loginfo("", printmsg=True)
+    loginfo("-- Estatus -------------------------------------------", printmsg=printmsg)
+    loginfo("Carpeta temporal de trabajo  : {0}".format(workpath), printmsg=printmsg)
+    loginfo("Carpeta de salida            : {0}".format(outputpath), printmsg=printmsg)
+
+    if not cfg.debug_page:
+        loginfo("Eliminamos carpeta de trabajo")
         shutil.rmtree(workpath)
 
     actas_error = []
@@ -813,13 +821,13 @@ def process_pdf(pdf_file, force_page=None):
         if not os.path.isfile(f):
             actas_error.append(a)
 
-    loginfo("Total de actas	              : {0}".format(total_actas), printmsg=True)
+    loginfo("Total de actas               : {0}".format(total_actas), printmsg=True)
     loginfo("Total de regiones recortadas : {0}".format(total_regions), printmsg=True)
     if actas_error:
-        loginfo("Actas no encontradas     : {0}".format(",".join(actas_error)), printmsg=True)
+        loginfo("Actas no encontradas         : {0}".format(",".join(actas_error)), printmsg=True)
 
-    if force_page:
-        loginfo("Actas encontradas        : {0}".format(",".join(set(lista_actas)-set(actas_error))), printmsg=True)
+    if not cfg.debug_page:
+        # loginfo("Actas encontradas            : {0}".format(",".join(set(lista_actas)-set(actas_error))), printmsg=True)
         loginfo("-- Configuración -------------------------------------", printmsg=True)
         for linea in str(cfg).split("\n"):
             loginfo(linea, printmsg=True)
@@ -827,8 +835,9 @@ def process_pdf(pdf_file, force_page=None):
     loginfo("------------------------------------------------------", printmsg=True)
     loginfo("Finish process", printmsg=True)
 
-    if args.debug_page:
+    if cfg.debug_page:
         show_results(workpath, outputpath, lista_actas)
+
 
 ################################################################################
 #  Cuerpo principal
@@ -861,9 +870,9 @@ if __name__ == "__main__":
 
         if args.logfile:
             log_level = getattr(logging, args.loglevel.upper(), None)
-            logging.basicConfig(filename=args.logfile, 
-                                level=log_level, 
-                                format='%(asctime)s|%(levelname)s|%(message)s', 
+            logging.basicConfig(filename=args.logfile,
+                                level=log_level,
+                                format='%(asctime)s|%(levelname)s|%(message)s',
                                 datefmt='%Y/%m/%d %I:%M:%S',
                                 filemode='w')
 
@@ -876,7 +885,10 @@ if __name__ == "__main__":
 
         if args.debug_page:
             cfg.save_process_files = True
+            cfg.debug_page = args.debug_page
 
+        cfg.from_page = args.from_page
+        cfg.to_page = args.to_page
         if args.inputpath:
             cfg.inputdir = args.inputpath
 
@@ -884,7 +896,12 @@ if __name__ == "__main__":
         loginfo("Process PDF : {0}".format(args.pdffile))
 
         if os.path.isfile(args.pdffile):
-            process_pdf(args.pdffile, args.debug_page)
+
+            if args.logos:
+                logos_from_pdf(cfg, args.pdffile, args.quiet)
+
+            process_pdf(cfg, args.pdffile, args.quiet)
+
         else:
             logerror("No existe el archivo " + args.pdffile)
 

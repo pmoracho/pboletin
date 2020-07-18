@@ -7,6 +7,9 @@ import os
 import sys
 import re
 import subprocess
+import warnings
+import numpy as np
+import cv2
 
 
 def add_resolution_to_jpg(filename, resolution):
@@ -99,3 +102,34 @@ def pdf_count_pages(filename, pdfinfo_bin, rxcountpages):
     m = re.findall(rxcountpages, out.decode('latin1'))
 
     return int(m[0]) if m else None
+
+
+def make_wide(formatter, w=120, h=36):
+    """Return a wider HelpFormatter, if possible."""
+    try:
+        # https://stackoverflow.com/a/5464440
+        # beware: "Only the name of this class is considered a public API."
+        kwargs = {'width': w, 'max_help_position': h}
+        formatter(None, **kwargs)
+        return lambda prog: formatter(prog, **kwargs)
+    except TypeError:
+        warnings.warn("argparse help formatter failed, falling back.")
+        return formatter
+
+
+def clean_blank_area(img):
+
+    # img = img[:-20, :-20]  # Perform pre-cropping
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = 255*(gray < 128).astype(np.uint8)  # To invert the text to white
+    gray = cv2.morphologyEx(gray, cv2.MORPH_OPEN, np.ones((2, 2), dtype=np.uint8))  # Perform noise filtering
+    coords = cv2.findNonZero(gray)  # Find all non-zero points (text)
+    x, y, w, h = cv2.boundingRect(coords)  # Find minimum spanning bounding box
+
+    margin = 0
+    x = x - margin
+    y = y - margin
+    w = w + margin*2
+    h = h + margin*2
+    rect = img[y:y+h, x:x+w]  # Crop the image - note we do this on the original image
+    return rect
