@@ -39,7 +39,7 @@ try:
 
     import gettext
     from gettext import gettext as _
-  
+
     def my_gettext(s):
         current_dict = {
             'usage: ': 'uso: ',
@@ -218,7 +218,7 @@ class DataExtractor:
                 if yt <= yi:
                     objetos.append((acta, text, filename))
                     break
-       
+
         for acta, xt, yt, text in [e for e in texto_actas if e[0]]:
             if acta not in [a[0] for a in objetos]:
                 objetos.append((acta, text, None))
@@ -241,7 +241,6 @@ def logos_from_pdf(cfg, pdf_file, quiet=False):
     outputpath_txt = os.path.join(cfg.outputdir, filename, "txt")
     os.makedirs(outputpath_txt, exist_ok=True)
     os.makedirs(outputpath_logos, exist_ok=True)
-
 
     dte = DataExtractor(workpath)
 
@@ -309,6 +308,7 @@ def logos_from_pdf(cfg, pdf_file, quiet=False):
     if not cfg.debug_page:
         loginfo("Eliminamos carpeta de trabajo")
         shutil.rmtree(workpath)
+
 
 ################################################################################
 #  Cuerpo principal
