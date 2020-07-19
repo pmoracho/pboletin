@@ -179,12 +179,6 @@ def init_argparse():
                             "dest":	"quiet",
                             "default": False,
                             "help":	_("Modo silencioso sin mostrar barra de progreso.")
-                },
-                "--logos -e": {
-                            "action": "store_true",
-                            "dest":	"logos",
-                            "default": False,
-                            "help":	_("Extracción de logos")
                 }
         }
 
@@ -287,6 +281,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
         if cfg.save_process_files:
             cv.imwrite(os.path.join(workpath, '05.crop_mask.png'), crop_mask)
             cv.imwrite(os.path.join(workpath, '06.original_con_lineas.png'), original_con_lineas)
+            # cv.imwrite(os.path.join(workpath, '07.original_con_lineas_simplificadas.png'), original_con_lineas)
 
         ############################################################################
         # En base a la mascara obtengo los rectangulos de interes
@@ -546,6 +541,12 @@ def process_lines(img, lista, in_res):
     min_y = min_y + 10
 
     ############################################################################
+    # Dejar solo horizontales
+    ############################################################################
+    if cfg.only_horizontal:
+        newlista = [linea for linea in newlista if linea[1] == linea[3]]
+
+    ############################################################################
     # Agrego un recuadro
     ############################################################################
     newlista.append([min_x, min_y, max_x, min_y])
@@ -559,11 +560,7 @@ def process_lines(img, lista, in_res):
     newlista = simplificar(simplificar(newlista, pair=1), pair=2)
     newlista = list(map(list, set(map(tuple, newlista))))
 
-    ############################################################################
-    # Dejar solo horizontales
-    ############################################################################
-    if cfg.only_horizontal:
-        newlista = [linea for linea in newlista if linea[1] == linea[3]]
+
 
     ############################################################################
     # Conectar lineas horizontales con las verticales
@@ -897,7 +894,7 @@ if __name__ == "__main__":
 
         if os.path.isfile(args.pdffile):
 
-            if args.logos:
+            if cfg.export_logos:
                 logos_from_pdf(cfg, args.pdffile, args.quiet)
 
             process_pdf(cfg, args.pdffile, args.quiet)

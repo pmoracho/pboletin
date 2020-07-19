@@ -14,6 +14,15 @@ def show_results(workpath, outpath, lista_actas):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+    # img2 = cv2.imread(os.path.join(workpath, '07.original_con_lineas_simplificadas.png'))
+    # wname = "Original c/mascara simplificado"
+    # cv2.namedWindow(wname, cv2.WND_PROP_FULLSCREEN)
+    # cv2.setWindowProperty(wname, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    # cv2.imshow(wname, img2)
+
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
     for acta in lista_actas:
         recorte = os.path.join(outpath, 'jpg', "{0}.jpg".format(acta))
         logo = os.path.join(outpath, 'logos', "{0}.jpg".format(acta))
