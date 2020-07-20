@@ -281,7 +281,6 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
         if cfg.save_process_files:
             cv.imwrite(os.path.join(workpath, '05.crop_mask.png'), crop_mask)
             cv.imwrite(os.path.join(workpath, '06.original_con_lineas.png'), original_con_lineas)
-            # cv.imwrite(os.path.join(workpath, '07.original_con_lineas_simplificadas.png'), original_con_lineas)
 
         ############################################################################
         # En base a la mascara obtengo los rectangulos de interes

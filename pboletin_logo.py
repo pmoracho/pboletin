@@ -191,7 +191,7 @@ class DataExtractor:
             None
 
     def get_data_from_layout(self, layout):
-        # from pprint import pprint
+
         texto_actas = []
         imagenes_actas = []
         for lobj in layout:
@@ -205,14 +205,11 @@ class DataExtractor:
                 for n, img in enumerate(lobj, start=1):
                     if isinstance(img, LTImage):
                         x, y, filename = lobj.bbox[0], lobj.bbox[3], save_image(img, self.workpath)
-                        # print((x, y, filename))
                         imagenes_actas.append((x, y, filename))
 
         objetos = []
         texto_actas = sorted(texto_actas, key=lambda x: x[1], reverse=True)
 
-        # pprint(texto_actas)
-        # pprint(imagenes_actas)
         for xi, yi, filename in imagenes_actas:
             for acta, xt, yt, text in [e for e in texto_actas if e[0]]:
                 if yt <= yi:
@@ -286,7 +283,7 @@ def logos_from_pdf(cfg, pdf_file, quiet=False):
                     _, file_extension = os.path.splitext(filename)
                     shutil.copyfile(filename, os.path.join(outputpath_logos, "{0}{1}".format(acta, file_extension)))
 
-                txt_file = os.path.join(outputpath_txt, "{0}.{1}".format(acta, ".txt"))
+                txt_file = os.path.join(outputpath_txt, "{0}.{1}".format(acta, "txt"))
                 with open(txt_file, 'w') as f:
                     f.write(texto)
 
@@ -348,7 +345,7 @@ if __name__ == "__main__":
                                 filemode='w')
 
         try:
-            loginfo("Cobfiguración       : {0}".format(configfile))
+            loginfo("Configuración       : {0}".format(configfile))
             cfg.set_file(configfile)
         except IOError as msg:
             cmdparser.error(str(msg))
