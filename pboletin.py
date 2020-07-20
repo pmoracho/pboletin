@@ -255,9 +255,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
     theta = int(cfg.theta)
     thres = int(cfg.line_thres*cfg.compensation)
     rho = cfg.line_rho
-    loginfo("Lines detection: rho {0} np.pi/500: {1} thres {2} minLineLength {3}, maxLineGap {4}, theta {5}".format(
-        rho, np.pi/300, thres, minLineLength, maxLineGap, theta)
-        )
+    loginfo("Lines detection")
 
     linesP = None
     linesP = cv.HoughLinesP(clean_mask_gray, rho, np.pi/300, thres, minLineLength=minLineLength, maxLineGap=maxLineGap)
@@ -322,7 +320,6 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
             if area < max_area and area > min_area:
 
                 acta = get_acta(actas, (x, y, x+w, y+h), relation)
-                loginfo("Acta ubicada por posicion: {0}".format(acta))
 
                 roi = final[y:y+h, x:x+w]
                 roi = get_main_area(roi, acta)
@@ -432,7 +429,7 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
                 if unique_colors <= 256:
                     merged = cv.cvtColor(merged, cv.COLOR_BGR2GRAY)
 
-                loginfo("Saving: {0}".format(fmerged))
+                loginfo("Saving           : {0}".format(fmerged))
                 if ext.lower() == 'jpg':
                     cv.imwrite(fmerged, merged, compression)
                     add_resolution_to_jpg(fmerged, cfg.resolution)
@@ -446,7 +443,7 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
         else:
             f = os.path.join(opath, 'check', '{0}_crop_{1}.{2}'.format(boletin, index, ext))
 
-        loginfo("Saving: {0}".format(f))
+        loginfo("Saving           : {0}".format(f))
         if ext.lower() == 'pcx':
             # Mejorar esto por Dios
             src = f.replace(ext, cfg.imgext[0])
@@ -468,13 +465,13 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
             outpath = os.path.join(outputpath, ext, 'check')
 
             dst_filename = os.path.join(outpath, os.path.basename(last_file))
-            loginfo("Moving: {0} to {1}".format(last_file, dst_filename))
+            loginfo("Moving           : {0} to {1}".format(last_file, dst_filename))
             shutil.move(last_file, outpath)
 
             fmerged = os.path.join(outputpath, ext, 'check', '{0}.merged.{1}'.format(last_acta, ext))
             dst_filename = os.path.join(outpath, os.path.basename(fmerged))
 
-            loginfo("Moving: {0} to {1}".format(fmerged, dst_filename))
+            loginfo("Moving           : {0} to {1}".format(fmerged, dst_filename))
             shutil.move(fmerged, last_file)
 
     return 1
