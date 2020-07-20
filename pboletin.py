@@ -85,7 +85,6 @@ try:
     from tools import pdf_count_pages
     from tools import loginfo
     from tools import logerror
-    from tools import clean_blank_area
     from tools import make_wide
     from show import show_results
     from pboletin_logo import logos_from_pdf
@@ -258,7 +257,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
     loginfo("Lines detection")
 
     linesP = None
-    linesP = cv.HoughLinesP(clean_mask_gray, rho, np.pi/300, thres, minLineLength=minLineLength, maxLineGap=maxLineGap)
+    linesP = cv.HoughLinesP(clean_mask_gray, rho, np.pi/theta, thres, minLineLength=minLineLength, maxLineGap=maxLineGap)
 
     cv.imwrite(os.path.join(workpath, '01.original.png'), src)
     cv.imwrite(os.path.join(workpath, '02.mask_bw_negative.png'), mask_bw_negative)
@@ -555,8 +554,6 @@ def process_lines(img, lista, in_res):
     ############################################################################
     newlista = simplificar(simplificar(newlista, pair=1), pair=2)
     newlista = list(map(list, set(map(tuple, newlista))))
-
-
 
     ############################################################################
     # Conectar lineas horizontales con las verticales
