@@ -476,11 +476,29 @@ def save_crop(acta, crop, outputpath, boletin, index, last_acta):
     return 1
 
 
-def get_acta(actas, region, r):
+def get_acta(actas_boletin, region_donde_buscar, relacion_aspecto):
+    """get_acta: obtiene el número de acta dada una región
 
-    rx1, ry1, rx2, ry2 = region
-    for x, y, numero in actas:
-        if x*r >= rx1 and x*r <= rx2 and y*r >= ry1 and y*r <= ry2:
+    Dada una región expresada en coordenadas x1, y1, x2, y2
+    se trata de ubicar el número de acta que correspondería. Los números
+    de acta se definen dentro del PDF también con coordenadas de la
+    página.
+
+    Args:
+        actas_boletin: Lista completa de actas del boletín
+        region_a_buscar: Region del recorte
+        relacion_aspecto: Relación de aspecto de la página Alto/Ancho
+
+    Returns:
+        El número de acta, en caso de no encontralo None
+    """
+
+    rx1, ry1, rx2, ry2 = region_donde_buscar
+    for x, y, numero in actas_boletin:
+        if x*relacion_aspecto >= rx1 \
+            and x*relacion_aspecto <= rx2 \
+            and y*relacion_aspecto >= ry1 \
+            and y*relacion_aspecto <= ry2:
             return numero
 
     return None
