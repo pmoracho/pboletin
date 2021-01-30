@@ -30,10 +30,11 @@ class Config:
                "only_horizontal": False
             }
 
-    def __init__(self, file=None):
+    def __init__(self, file=None, override=None):
 
         self.file = file
         self.config = ConfigParser()
+        self.override = override
         self.__dict__.update(self.DEF_CFG)
         if self.file:
             self._load()
@@ -47,6 +48,9 @@ class Config:
     def _load(self):
         self.config.read(self.file)
         self.__dict__.update(dict(self.config.items("GLOBAL")))
+
+        if self.override:
+            self.__dict__.update(dict(self.config.items(self.override)))
 
         # lista
         for e in ["imgext"]:
