@@ -270,7 +270,7 @@ def crop_regions(filepath, workpath, outputpath, last_acta, metadata=None):
         for linea in [e[1] for e in enumerate(llorig)]:
             cv.line(original_original_con_lineas, (linea[0], linea[1]), (linea[2], linea[3]), (0, 0, 255), 3, cv.LINE_AA)
 
-        ll = process_lines(src, llorig, cfg.resolution)
+        ll = process_lines(src, llorig, cfg.resolution, cfg.only_horizontal, cfg.h_line_gap, cfg.v_line_gap, cfg.compensation)
         for linea in [e[1] for e in enumerate(ll)]:
             cv.line(original_con_lineas, (linea[0], linea[1]), (linea[2], linea[3]), (0, 0, 255), 3, cv.LINE_AA)
             cv.line(crop_mask, (linea[0], linea[1]), (linea[2], linea[3]), (0, 0, 255), 3, cv.LINE_AA)
@@ -504,7 +504,7 @@ def get_acta(actas_boletin, region_donde_buscar, relacion_aspecto):
     return None
 
 
-def process_lines(img, lista, in_res):
+def process_lines(img, lista, in_res, only_horizontal, h_line_gap, v_line_gap, compensation):
 
     ############################################################################
     # Ajustamos inclinaciones de las líneas
@@ -527,7 +527,7 @@ def process_lines(img, lista, in_res):
     ############################################################################
     # Resolver el problema de falta de linea horizontal al final
     ############################################################################
-    bottom = int(3300*(cfg.resolution/300))
+    bottom = int(3300*(in_res/300))
 
     dif = bottom-max_y
     max_y = max_y if dif <= 50 else bottom
@@ -556,7 +556,7 @@ def process_lines(img, lista, in_res):
     ############################################################################
     # Dejar solo horizontales
     ############################################################################
-    if cfg.only_horizontal:
+    if only_horizontal:
         newlista = [linea for linea in newlista if linea[1] == linea[3]]
 
     ############################################################################
@@ -576,8 +576,8 @@ def process_lines(img, lista, in_res):
     ############################################################################
     # Conectar lineas horizontales con las verticales
     ############################################################################
-    newlista = conectar_horizontales(newlista, int(cfg.h_line_gap*cfg.compensation))
-    newlista = conectar_verticales(newlista, int(cfg.v_line_gap*cfg.compensation))
+    newlista = conectar_horizontales(newlista, int(h_line_gap*compensation))
+    newlista = conectar_verticales(newlista, int(v_line_gap*compensation))
 
     return(newlista)
 
@@ -676,6 +676,7 @@ def get_metadata(cfg, html):
     t = re.findall(rxactas, html)
     if t:
         x, y = map(int, t[0])
+
 
     rxactas = re.compile(cfg.rxactas, re.MULTILINE)
     m = re.finditer(rxactas, html)
