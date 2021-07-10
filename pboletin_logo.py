@@ -284,7 +284,8 @@ def logos_from_pdf(cfg, pdf_file, quiet=False):
                     shutil.copyfile(filename, os.path.join(outputpath_logos, "{0}{1}".format(acta, file_extension)))
 
                 txt_file = os.path.join(outputpath_txt, "{0}.{1}".format(acta, "txt"))
-                with open(txt_file, 'w') as f:
+
+                with open(txt_file, 'w', errors="ignore") as f:
                     f.write(texto)
 
             if not quiet:
