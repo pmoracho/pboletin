@@ -285,6 +285,7 @@ def logos_from_pdf(cfg, pdf_file, quiet=False):
 
                 txt_file = os.path.join(outputpath_txt, "{0}.{1}".format(acta, "txt"))
 
+                texto = texto.encode('latin-1', 'ignore').decode('utf-8', 'ignore')
                 with open(txt_file, 'w', errors="ignore") as f:
                     f.write(texto)
 
