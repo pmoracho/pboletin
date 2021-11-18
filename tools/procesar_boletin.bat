@@ -2,8 +2,8 @@
 set /p boletin="Numero de boletin a procesar: "
 @pboletin.exe %boletin%.pdf
 
-@copy F:\PI_import\pdftxt\cd\out\%boletin%\JPG\*.JPG F:\PI_import\pdftxt\cd\Boletin
-@copy F:\PI_import\pdftxt\cd\out\%boletin%\PCX\*.PCX F:\PI_import\pdftxt\cd\Boletin
+@copy \\Momdb2Test\Marcas\PruebasNip\%boletin%\JPG\*.JPG \\PlusDesa02\Mecanus\PI\Images\Import\Boletin\
+@copy \\Momdb2Test\Marcas\PruebasNip\%boletin%\PCX\*.PCX \\PlusDesa02\Mecanus\PI\Images\Import\Boletin\
 
 
 pause
