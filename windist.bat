@@ -1,38 +1,38 @@
-@echo off
+﻿@echo off
 
-REM --------------------------------------------------------
-REM Bat para la generación del paquete de deploy de pboletin
-REM --------------------------------------------------------
+@echo  --------------------------------------------------------
+@echo Bat para la generación del paquete de deploy de pboletin
+@echo --------------------------------------------------------
 
 
-REM --------------------------------------------------------
-REM Creación del paquete para distribuir
-REM --------------------------------------------------------
+@echo --------------------------------------------------------
+@echo Creación del paquete para distribuir
+@echo --------------------------------------------------------
 @echo --------------------------------------------------------
 @echo Generando distribucion con pyinstaller..
 @echo --------------------------------------------------------
-@pyinstaller pboletin.py --onedir --noupx --clean --noconfirm
+@pyinstaller pboletin.py --onedir --noupx --clean --noconfirm --path=".venv\lib\site-packages\cv2"
+
 
 @echo --------------------------------------------------------
 @echo Copiando archivos y herramientas adicionales..
 @echo --------------------------------------------------------
 
-REM --------------------------------------------------------
-REM Ini de la applicación
-REM !! Copiar manualmente si es necesario
-REM --------------------------------------------------------
-REM @copy pboletin.ini dist\pboletin\pboletin.ini
+@echo --------------------------------------------------------
+@echo Ini de la applicación
+@echo --------------------------------------------------------
+@copy pboletin.win.ini dist\pboletin\pboletin.ini
 
-REM --------------------------------------------------------
-REM Carpeta de pdftools
-REM --------------------------------------------------------
+@echo --------------------------------------------------------
+@echo Carpeta de pdftools y procesar_boletib.bat
+@echo --------------------------------------------------------
 @mkdir dist\pboletin\pdftools
 @copy tools\pdftools\* dist\pboletin\pdftools
-REM @copy tools\procesar_boletin.bat dist\pboletin
+@copy tools\procesar_boletin.bat dist\pboletin
 
-REM --------------------------------------------------------
-REM Eliminar archivos de trabajo
-REM --------------------------------------------------------
+@echo --------------------------------------------------------
+@echo Eliminar archivos de trabajo
+@echo --------------------------------------------------------
 @echo --------------------------------------------------------
 @echo Eliminando archivos de trabajo ..
 @echo --------------------------------------------------------
