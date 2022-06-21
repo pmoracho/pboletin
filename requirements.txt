@@ -1,7 +1,7 @@
 cffi==1.15.0
 chardet==4.0.0
 cryptography==35.0.0
-numpy==1.21.4
+numpy==1.22.0
 opencv-python==4.5.4.58
 pdfminer.six==20211012
 Pillow>=9.0.0
