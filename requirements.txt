@@ -1,6 +1,6 @@
 cffi==1.15.0
 chardet==4.0.0
-cryptography==39.0.1
+cryptography==41.0.3
 numpy==1.22.0
 opencv-python==4.5.4.58
 pdfminer.six==20211012
